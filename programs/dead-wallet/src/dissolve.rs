@@ -1,7 +1,7 @@
 use anchor_lang::{prelude::{ *},  system_program::{self, Transfer} };
 use anchor_spl::{associated_token::get_associated_token_address, token::{TransferChecked, transfer_checked}, token_interface::{CloseAccount, Mint, TokenAccount, TokenInterface, Transfer as TokenTransfer}};
 
-use crate::{accountdata::{Vault, WillAccount}, error::Errors};
+use crate::{states::{Vault, WillAccount}, error::Errors};
 
 
 #[derive(Accounts)]
@@ -31,7 +31,9 @@ pub fn dissolve<'info>(ctx: Context<'_, '_, 'info, 'info, Dissolve<'info>>) -> R
     // ensure that signer is the will account owner
     // ensure that will account is Active
     // ensure the passed accounts
-
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
 
     // transfer back the sol to the will account owner
     let assets = ctx.accounts.will_account.assets.clone();

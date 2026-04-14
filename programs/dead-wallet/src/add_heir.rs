@@ -1,6 +1,6 @@
 use anchor_lang::{Accounts, Result, prelude::{*}};
 
-use crate::{accountdata::{ Heir, WillAccount}, error::Errors};
+use crate::{states::{ Heir, WillAccount}, error::Errors};
 
 
 #[derive(Accounts)]
@@ -32,6 +32,9 @@ pub fn add_heir(ctx:Context<AddHeir>, bps:u32,) -> Result<()> {
     require!(ctx.accounts.signer.key() == ctx.accounts.will_account.owner.key(), Errors::Owner_Not_Valid);
     require!(ctx.accounts.will_account.claimed != true,  Errors::Will_Already_Claimed);
     require!(bps > 0, Errors::BPS_NOT_INVALID);
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
 
     let new_total = ctx.accounts.will_account
     .total_bps
@@ -44,7 +47,7 @@ pub fn add_heir(ctx:Context<AddHeir>, bps:u32,) -> Result<()> {
     ctx.accounts.heir_account.set_inner(Heir { 
         bps: bps, 
         owner: ctx.accounts.signer.key(),
-        status: crate::accountdata::HeirStatus::Active,
+        status: crate::states::HeirStatus::Active,
         wallet_address: ctx.accounts.heir_original_address.key(),
         bump: ctx.bumps.heir_account 
     });

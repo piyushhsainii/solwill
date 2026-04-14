@@ -1,6 +1,6 @@
 use anchor_lang::{Accounts, Result, prelude::{*}};
 
-use crate::{accountdata::{ Heir, WillAccount}, error::Errors};
+use crate::{states::{ Heir, WillAccount}, error::Errors};
 
 
 #[derive(Accounts)]
@@ -37,7 +37,10 @@ pub fn update_heir(ctx:Context<UpdateHeir>, updated_bps:u32,) -> Result<()> {
     require!(ctx.accounts.signer.key() == ctx.accounts.will_account.owner.key(), Errors::Owner_Not_Valid);
     require!(ctx.accounts.will_account.claimed  != true,  Errors::Will_Already_Claimed);
     require!(ctx.accounts.will_account.heir_count < 4, Errors::HeirMaxLimitReached);    
-
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
+    
     // update total bps in will account
     ctx.accounts.will_account.total_bps = new_bps; 
 

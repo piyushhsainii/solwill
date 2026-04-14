@@ -1,6 +1,6 @@
 use anchor_lang::{prelude::*};
 use crate::Errors::Owner_Not_Valid;
-use crate::accountdata::{ WillAccount};
+use crate::states::{ WillAccount};
 use crate::error::Errors;
 
 
@@ -20,7 +20,10 @@ pub fn check_in(ctx:Context<CheckIn>) -> Result<()> {
     
     require!(ctx.accounts.owner.key() == ctx.accounts.will_account.owner.key(), Errors::Owner_Not_Valid);
     require!(ctx.accounts.will_account.claimed != true, Errors::Will_Already_Claimed);
-
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
+    
     ctx.accounts.will_account.last_check_in = Clock::get()?.unix_timestamp;
 
     Ok(())

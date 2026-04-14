@@ -1,9 +1,7 @@
 
 use anchor_lang::{prelude::*, Result};
 use anchor_lang::Space;
-use crate::accountdata::{Vault, WillAccount};
-
-
+use crate::states::{Vault, WillAccount};
 
 #[derive(Accounts,)]
 pub struct Initialize<'info> {

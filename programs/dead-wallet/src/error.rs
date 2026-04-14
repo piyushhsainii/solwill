@@ -1,7 +1,6 @@
 use anchor_lang::error_code;
 
 
-
 #[error_code]
 pub enum Errors {
     #[msg("Insuffiecient Balance")]
@@ -37,7 +36,9 @@ pub enum Errors {
     #[msg("Owner ATA ")]
     OwnerATANotCorrect,
     #[msg("Max Limit Reached to add heirs")]
-    HeirMaxLimitReached
+    HeirMaxLimitReached,
+    #[msg("DeadlineAlreadyPassed")]
+    WillDeadlinePassed
 
 
 }

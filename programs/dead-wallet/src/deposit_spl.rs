@@ -1,7 +1,7 @@
 use anchor_lang::{ prelude::*, system_program::{self, Transfer}};
 use anchor_spl::{associated_token::AssociatedToken, token::{TransferChecked, transfer_checked}, token_interface::{Mint, TokenAccount, TokenInterface}};
 
-use crate::{accountdata::{SPLTOKENS, Vault, WillAccount}, error::Errors};
+use crate::{states::{SPLTOKENS, Vault, WillAccount}, error::Errors};
 use crate::Errors::{LowBalance,Accounts_Not_Provided,Unauthorised_Depositor};
 
 
@@ -50,7 +50,9 @@ pub fn depositSpl(ctx:Context<DepositSpl>, amount:u64) -> Result<()> {
 
     require!(amount > 0, Errors::LowBalance);
     require!(ctx.accounts.will_account.claimed != true, Errors::Will_Already_Claimed);
-    
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
     // ix to do spl transfer token
     let ix = CpiContext::new(ctx.accounts.token_program.to_account_info(), TransferChecked {
         from: ctx.accounts.owner_ata.to_account_info(),

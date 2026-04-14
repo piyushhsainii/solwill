@@ -1,7 +1,8 @@
 use anchor_lang::{prelude::*, system_program::{self, transfer}};
 use anchor_spl::{ associated_token::{self, AssociatedToken}, token::{Transfer, TransferChecked, transfer_checked}, token_interface::{Mint, TokenAccount, TokenInterface}};
 
-use crate::{accountdata::{Heir, HeirStatus, Vault, WillAccount}, error::Errors};
+use crate::{error::Errors, states::{Heir, HeirStatus, Vault, WillAccount}};
+
 
 #[derive(Accounts)]
 pub struct Claim<'info> {
@@ -69,7 +70,7 @@ pub fn claim<'info>(ctx:Context<'_, '_, 'info, 'info, Claim<'info>>) -> Result<(
     );
     system_program::transfer(ix, sol_amount)?;  
 
-    ctx.accounts.heir_account.status = crate::accountdata::HeirStatus::Claimed;
+    ctx.accounts.heir_account.status = HeirStatus::Claimed;
 
     // handle spl tokens transfer
     // ensures

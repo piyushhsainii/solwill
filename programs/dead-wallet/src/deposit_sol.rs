@@ -1,7 +1,7 @@
 use anchor_lang::{Result, prelude::*, system_program};
 use anchor_spl::{associated_token::AssociatedToken, token::Transfer, token_interface::{Mint, TokenAccount, TokenInterface}};
 
-use crate::{accountdata::{ Vault, WillAccount}, error::Errors};
+use crate::{states::{ Vault, WillAccount}, error::Errors};
 
 
 #[derive(Accounts)]
@@ -32,6 +32,9 @@ pub fn deposit(ctx:Context<DepositSol>, amt:u64) -> Result<()> {
     // check if amount is > than 0.
     require!(amt > 0, Errors::LowBalance);
     require!(ctx.accounts.will_account.claimed != true, Errors::Will_Already_Claimed);
+    let now = Clock::get()?.unix_timestamp;
+    let deadline = ctx.accounts.will_account.last_check_in + ctx.accounts.will_account.interval;
+    require!(deadline > now, Errors::WillDeadlinePassed);
     // owner has to same as will owner.
     require!(ctx.accounts.owner.key() == ctx.accounts.will_account.owner.key(), Errors::Unauthorised_Depositor);
 

@@ -1,34 +1,36 @@
 use anchor_lang::prelude::*;
 
-mod accountdata;
-use accountdata::*;
-
+mod states;
 mod initialize;
-use initialize::*;
-
 mod deposit_sol;
-use deposit_sol::*;
-
 mod deposit_spl;
-use deposit_spl::*;
-
 mod add_heir;
-use add_heir::*;
-
 mod update_heir;
-use update_heir::*;
-
 mod checkin;
-use checkin::*;
-
 mod claim_funds;
-use claim_funds::*;
-
 mod dissolve;
-use dissolve::*;
+mod update_will;
+mod error;
+mod removeheir;
+mod withdraw_sol;
+mod withdraw_spl;
 
-pub mod error;
+use states::*;
+use initialize::*;
+use deposit_sol::*;
+use deposit_spl::*;
+use add_heir::*;
+use update_heir::*;
+use checkin::*;
+use claim_funds::*;
+use dissolve::*;
+use update_will::*;
+use removeheir::*;
+use withdraw_sol::*;
+use withdraw_spl::*;
+
 use error::*;
+
 
 declare_id!("Mxa8zNFzuZdNAcoRuJDXMD5XccdmJrarcAyrW24DuQa");
 
