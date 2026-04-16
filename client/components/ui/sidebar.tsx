@@ -11,6 +11,7 @@ import {
     Coins,
 } from 'lucide-react'
 import { useWillStore } from '@/app/store/useWillStore'
+import { useLogout } from '@privy-io/react-auth'
 
 const NAV_ITEMS = [
     {
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
 export default function Sidebar() {
     const pathname = usePathname()
     const { publicKey, connected } = useWillStore()
+    const { logout } = useLogout()
 
     const shortAddr = publicKey
         ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`
@@ -290,6 +292,7 @@ export default function Sidebar() {
                 </div>
 
                 <button
+                    onClick={() => { logout() }}
                     title="Disconnect"
                     style={{
                         background: '#FFFFFF',

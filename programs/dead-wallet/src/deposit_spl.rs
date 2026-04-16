@@ -46,7 +46,7 @@ pub struct DepositSpl<'info> {
 
 //deposit — owner transfers SOL or SPL tokens into vault. Status Draft → Active on first deposit. For SPL: creates ATA owned by vault PDA, transfers tokens in. 
 
-pub fn depositSpl(ctx:Context<DepositSpl>, amount:u64) -> Result<()> {
+pub fn deposit_spl(ctx:Context<DepositSpl>, amount:u64) -> Result<()> {
 
     require!(amount > 0, Errors::LowBalance);
     require!(ctx.accounts.will_account.claimed != true, Errors::Will_Already_Claimed);

@@ -29,7 +29,7 @@ pub struct Initialize<'info> {
 
 }
 
-pub fn initialize(ctx:Context<Initialize>, interval:i64) -> Result<()> {
+pub fn initialize_will(ctx:Context<Initialize>, interval:i64) -> Result<()> {
 
     // Initialized the Will
     ctx.accounts.will_account.set_inner( WillAccount {

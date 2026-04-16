@@ -103,7 +103,7 @@ pub fn claim<'info>(ctx:Context<'_, '_, 'info, 'info, Claim<'info>>) -> Result<(
       
 
         // create heir ata if not already present
-        if(heir_ata.data_is_empty()) {
+        if heir_ata.data_is_empty() {
 
             let cpi_context = ctx.accounts.associated_token_program.to_account_info();
 
