@@ -16,6 +16,7 @@ import { OnboardingProgress } from '@/components/Dashboard/onboarding-progress'
 import { OnboardingNavButtons } from '@/components/Dashboard/nav-buttons'
 import { useCreateWill } from '@/lib/hooks/useCreateWill'
 import { useWallets } from '@privy-io/react-auth/solana'
+import { useAnchorProvider } from '@/lib/hooks/useAnchorProvider'
 
 /* ─── Animation Variants ─────────────────────────────────────────────── */
 const stagger = {
@@ -57,7 +58,11 @@ export default function DashboardPage() {
         removeHeir,
         updateHeir
     } = useWillStore()
-
+    const {
+        pdas,
+        loading,
+        refresh
+    } = useAnchorProvider()
 
     const [simWill, setSimWill] = useState<any>(willAccount ?? null)
     const [simHeirs, setSimHeirs] = useState<Heir[]>(storeHeirs ?? [])
@@ -73,9 +78,9 @@ export default function DashboardPage() {
     type Phase = 0 | 1 | 2 | 'dashboard'
 
     const getAutoPhase = (): Phase => {
-        if (!activeWill) return 0
-        if (activeHeirs.length === 0 || totalHeirShare !== 100) return 1
-        if (!vaultAccount || vaultAccount.totalUsdValue <= 0) return 2
+        if (!activeWill) return 0                                          // no will → must create
+        if (activeHeirs.length === 0 || totalHeirShare !== 10000) return 1 // no heirs → must add  (note: shareBps is basis points so 100% = 10000)
+        if (!vaultAccount || vaultAccount.totalUsdValue <= 0) return 2     // no funds → can skip
         return 'dashboard'
     }
 
@@ -99,13 +104,13 @@ export default function DashboardPage() {
     const handleCreateWill = async (days: number) => {
         try {
             setLoadingStep(true)
-            console.log('hello')
             const success = await createWill(days)
-
             if (!success) return
 
+            await refresh()  // ← wait for store to update with the new willAccount
+
             setStepDir('forward')
-            setPhase(1)
+            setPhase(1)      // ← now activeWill is populated, phase moves forward
         } finally {
             setLoadingStep(false)
         }
@@ -149,15 +154,24 @@ export default function DashboardPage() {
         setTxPending(false)
         setTimeout(() => setCheckinAnim(false), 600)
     }
-    const goNext = () => {
-        setStepDir('forward')
+    const canGoNext = (): boolean => {
+        if (phase === 0) return !!activeWill        // must have created will on-chain
+        if (phase === 1) return activeHeirs.length > 0 && totalHeirShare === 10000
+        if (phase === 2) return true               // fund vault is always skippable
+        return false
+    }
 
-        setPhase((prev) => {
-            if (prev === 0) return 1
-            if (prev === 1) return 2
-            if (prev === 2) return 'dashboard'
-            return prev
+    const goNext = () => {
+        console.log('[goNext] canGoNext:', canGoNext(), {
+            phase,
+            activeWill: !!activeWill,
+            heirsLength: activeHeirs.length,
+            totalHeirShare,
+            vaultUsd: vaultAccount?.totalUsdValue,
         })
+
+        if (!canGoNext()) return
+        // ...
     }
 
     const goBack = () => {
@@ -165,22 +179,25 @@ export default function DashboardPage() {
 
         setPhase((prev) => {
             if (prev === 2) return 1
-            if (prev === 1) return 0
+            if (prev === 1) {
+                // if will already exists, can't go back to step 0 — it's done
+                if (activeWill) return 1
+                return 0
+            }
             return prev
         })
     }
-
     console.log(`phase value`, phase)
     // if (!connected) return null
 
     useEffect(() => {
+        if (loading) return
+        if (activeWill && activeHeirs.length > 0 && totalHeirShare === 10000) {
+            setPhase('dashboard')
+            return
+        }
         setPhase(getAutoPhase())
-    }, [
-        activeWill,
-        activeHeirs.length,
-        totalHeirShare,
-        vaultAccount?.totalUsdValue,
-    ])
+    }, [loading, activeWill, activeHeirs.length, totalHeirShare, vaultAccount?.totalUsdValue])
 
     return (
         <>
@@ -243,14 +260,12 @@ export default function DashboardPage() {
                                     boxShadow: '0 24px 64px rgba(0,0,0,0.08)',
                                 }}>
                                     <OnboardingProgress
+                                        goBack={goBack}
+                                        goNext={goNext}
                                         currentStep={phase}
                                         completedSteps={completedSteps}
+                                        isNextLocked={!canGoNext()}   // ← new prop
                                     />
-                                    {
-                                        phase as Phase !== 'dashboard' &&
-                                        <OnboardingNavButtons goBack={goBack} goNext={goNext} phase={phase} />
-                                    }
-
                                     <AnimatePresence mode="wait">
                                         {phase === 0 && (
                                             <CreateWillStep

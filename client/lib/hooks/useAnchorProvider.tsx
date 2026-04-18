@@ -17,7 +17,7 @@ import IDL from '../idl/idl.json'
 import { DeadWallet } from '../idl/idl'
 import { useSollWillWallet } from './useSolWillWallet'
 
-const PROGRAM_ID = new PublicKey('Mxa8zNFzuZdNAcoRuJDXMD5XccdmJrarcAyrW24DuQa')
+const PROGRAM_ID = new PublicKey('uJ5ujCBYYNJ7V4Fpurewj9cDSPT3jHnEKLnaxYPYss9')
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com'
 
 const WILL_SEED = Buffer.from('will')
@@ -79,7 +79,7 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
             setWallet(wallet.address)
         }
 
-        if (!wallet.address || !wallet.publicKey || !wallet.signTransaction) {
+        if (!wallet.address || !wallet.publicKey || !wallet.raw) {
             setLoading(false)
             return
         }
@@ -91,16 +91,7 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
 
                 const conn = new Connection(RPC_URL, 'confirmed')
 
-                const anchorWallet = {
-                    publicKey: wallet.publicKey!,
-                    signTransaction: (tx: any) => wallet.signTransaction!(tx),
-                    signAllTransactions: (txs: any[]) =>
-                        wallet.signAllTransactions
-                            ? wallet.signAllTransactions(txs)
-                            : Promise.all(txs.map((tx: any) => wallet.signTransaction!(tx))),
-                }
-
-                const provider = new AnchorProvider(conn, anchorWallet as any, {
+                const provider = new AnchorProvider(conn, wallet.raw as any, {
                     commitment: 'confirmed',
                 })
 
@@ -134,7 +125,7 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
         }
 
         init()
-    }, [wallet.ready, wallet.loading, wallet.address, wallet.publicKey, wallet.signTransaction])
+    }, [wallet.ready, wallet.loading, wallet.address, wallet.publicKey, wallet.raw])
 
     /* ── 2. Fetch on-chain state ─────────────────────────────────── */
     const refresh = useCallback(async () => {

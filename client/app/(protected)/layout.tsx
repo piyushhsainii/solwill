@@ -39,21 +39,18 @@ const WALLET_SETTLE_RENDERS = 5
 function HydratedLayout({ children }: { children: React.ReactNode }) {
     const { loading, error, program, pdas, refresh } = useAnchorProvider()
     const { authenticated, user } = usePrivy()
-    const { wallets } = useWallets()
-    const wallet = wallets[0];
     const willAccount = useWillStore(s => s.willAccount)
     const vaultAccount = useWillStore(s => s.vaultAccount)
     const { setConnected } = useWillStore()
 
-    // Track how many renders have passed while wallet isn't connected yet.
-    // This lets us stop waiting once the wallet has had enough time to settle.
+
     const [renderCount, setRenderCount] = useState(0)
 
     useEffect(() => {
         if (!authenticated || !user?.wallet?.address) {
             setRenderCount(prev => prev + 1)
         }
-    }) // intentionally no deps — runs every render
+    })
 
     const walletSettled =
         (authenticated && !!user?.wallet?.address) ||  // wallet is ready
@@ -61,7 +58,6 @@ function HydratedLayout({ children }: { children: React.ReactNode }) {
 
     const firstLoad = loading && willAccount === null && vaultAccount === null
 
-    // Wait for wallet to settle across renders before showing any spinner or content.
     // Without this, wallet.connected is false on render 1 even if it's about to be true.
     if (!walletSettled) {
         return <FullScreenSpinner label="Connecting wallet…" />

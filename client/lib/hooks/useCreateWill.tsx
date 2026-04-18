@@ -20,83 +20,15 @@ import type { DeadWallet } from '../idl/idl'
 import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
-
-
-type AnchorWallet = {
-    publicKey: PublicKey
-    signTransaction(tx: Transaction): Promise<Transaction>
-    signAllTransactions(txs: Transaction[]): Promise<Transaction[]>
-}
+import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 
 const PROGRAM_ID = new PublicKey(
-    'Mxa8zNFzuZdNAcoRuJDXMD5XccdmJrarcAyrW24DuQa'
+    'uJ5ujCBYYNJ7V4Fpurewj9cDSPT3jHnEKLnaxYPYss9'
 )
 
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const RPC_URL = clusterApiUrl('devnet')
-
-type WalletStandard = {
-    accounts?: Array<{ address: string }>
-    features?: Record<string, any>
-}
-
-function toAnchorWallet(
-    wallet: WalletStandard,
-    publicKey: PublicKey
-): AnchorWallet {
-    return {
-        publicKey,
-
-        async signTransaction(tx: Transaction): Promise<Transaction> {
-            const signer = wallet.features?.['solana:signTransaction']
-
-            if (!signer) {
-                throw new Error('Wallet does not support signTransaction')
-            }
-
-            const account = wallet.accounts?.[0]
-            if (!account) {
-                throw new Error('No wallet account found')
-            }
-
-            const result = await signer.signTransaction({
-                account,
-                transaction: tx,
-            })
-
-            return result.signedTransaction as Transaction
-        },
-
-        async signAllTransactions(
-            txs: Transaction[]
-        ): Promise<Transaction[]> {
-            const signer = wallet.features?.['solana:signTransaction']
-
-            if (!signer) {
-                throw new Error('Wallet does not support signAllTransactions')
-            }
-
-            const account = wallet.accounts?.[0]
-            if (!account) {
-                throw new Error('No wallet account found')
-            }
-
-            const signed = await Promise.all(
-                txs.map(async (tx) => {
-                    const result = await signer.signTransaction({
-                        account,
-                        transaction: tx,
-                    })
-
-                    return result.signedTransaction as Transaction
-                })
-            )
-
-            return signed
-        },
-    }
-}
 
 export function useCreateWill() {
     const {
@@ -127,11 +59,6 @@ export function useCreateWill() {
                 }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-
-                const anchorWallet = toAnchorWallet(
-                    raw as WalletStandard,
-                    publicKey
-                )
 
                 const provider = new AnchorProvider(
                     connection,
@@ -165,72 +92,102 @@ export function useCreateWill() {
 
                 const toastId = toast.loading('Creating will...')
 
-                const sig = await program.methods
+                // 1. Build the instruction
+                console.log('[createWill] building instruction...', {
+                    ownerPk: ownerPk.toBase58(),
+                    intervalSeconds: intervalSeconds.toNumber(),
+                    willPda: willPda.toBase58(),
+                    vaultPda: vaultPda.toBase58(),
+                })
+                const ix = await program.methods
                     .initialize(intervalSeconds)
-                    .accounts({
-                        signer: ownerPk,
-                    } as any)
-                    .rpc()
+                    .accounts({ signer: ownerPk })
+                    .instruction()
+                console.log('[createWill] instruction built:', ix)
+
+                // 2. Fetch blockhash
+                console.log('[createWill] fetching blockhash...')
+                const { blockhash, lastValidBlockHeight } =
+                    await connection.getLatestBlockhash('confirmed')
+                console.log('[createWill] blockhash:', blockhash)
+
+                // 3. Build transaction
+                const tx = new Transaction({
+                    feePayer: ownerPk,
+                    blockhash,
+                    lastValidBlockHeight,
+                }).add(ix)
+                console.log('[createWill] transaction built, instructions:', tx.instructions.length)
+
+                // 4. Serialize
+                let serializedTx: Uint8Array
+                try {
+                    serializedTx = new Uint8Array(
+                        tx.serialize({ requireAllSignatures: false, verifySignatures: false })
+                    )
+                    console.log('[createWill] serialized tx byteLength:', serializedTx.byteLength)
+                    console.log('[createWill] is Uint8Array:', serializedTx instanceof Uint8Array)
+                } catch (serErr) {
+                    console.error('[createWill] serialization failed:', serErr)
+                    throw serErr
+                }
+                console.log('[createWill] simulating transaction...')
+                // const sim = await connection.simulateTransaction(tx)
+                // console.log('[createWill] simulation result:', JSON.stringify(sim, null, 2))
+                // 5. Send to Phantom
+                console.log('[createWill] sending to Phantom for signing...')
+                let signature: string
+                try {
+                    const result = await raw.signAndSendTransaction({
+                        transaction: serializedTx,
+                        chain: 'solana:devnet',
+                    })
+                    signature = bs58.encode(result.signature)
+                    console.log('[createWill] Phantom returned signature:', signature)
+                    console.log('[createWill] Phantom returned signature:', signature)
+                } catch (signErr) {
+                    console.error('[createWill] Phantom rejected or errored:', signErr)
+                    console.error('[createWill] signErr name:', (signErr as any)?.name)
+                    console.error('[createWill] signErr message:', (signErr as any)?.message)
+                    console.error('[createWill] signErr code:', (signErr as any)?.code)
+                    throw signErr
+                }
+
+                // 6. Confirm
+                console.log('[createWill] confirming transaction...')
+                await connection.confirmTransaction(
+                    { signature, blockhash, lastValidBlockHeight },
+                    'confirmed'
+                )
+                console.log('[createWill] confirmed!')
 
                 toast.success('Will created!', { id: toastId })
-
-                console.log('TX:', sig)
 
                 await refresh()
 
                 return true
             } catch (err) {
-                const e =
-                    err instanceof Error
-                        ? err
-                        : new Error(String(err))
-
+                const e = err instanceof Error ? err : new Error(String(err))
                 console.error(e)
                 setError(e)
                 toast.error(parseAnchorError(e))
-
                 return false
             } finally {
                 setLoading(false)
                 setTxPending(false)
             }
         },
-        [
-            raw,
-            ready,
-            walletLoading,
-            connected,
-            publicKey,
-            refresh,
-            setTxPending,
-        ]
+        [raw, ready, walletLoading, connected, publicKey, refresh, setTxPending]
     )
 
-    return {
-        createWill,
-        loading,
-        error,
-    }
+    return { createWill, loading, error }
 }
 
 function parseAnchorError(err: Error): string {
     const msg = err.message || ''
-
-    if (msg.includes('User rejected')) {
-        return 'Transaction cancelled.'
-    }
-
-    if (msg.includes('already in use')) {
-        return 'Will already exists.'
-    }
-
-    if (msg.includes('insufficient funds')) {
-        return 'Not enough SOL for fees.'
-    }
-
-    if (msg.includes('signTransaction')) {
-        return 'Wallet cannot sign transaction.'
-    }
-
+    if (msg.includes('User rejected')) return 'Transaction cancelled.'
+    if (msg.includes('already in use')) return 'Will already exists.'
+    if (msg.includes('insufficient funds')) return 'Not enough SOL for fees.'
+    if (msg.includes('signTransaction')) return 'Wallet cannot sign transaction.'
     return msg
 }
