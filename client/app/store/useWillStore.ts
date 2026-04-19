@@ -3,13 +3,12 @@ import { create } from "zustand";
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
 /* -------------------------------------------------------------------------- */
-
 export type Heir = {
   id: string;
   walletAddress: string;
   shareBps: number;
+  onChain: boolean;
 };
-
 export type Asset = {
   symbol: string;
   mint?: string;
@@ -21,7 +20,7 @@ export type Asset = {
 
 type WillStatus = "Active" | "Grace Period" | "Triggered" | "Paused";
 
-type WillAccount = {
+export type WillAccount = {
   lastCheckin: number;
   interval: number;
   status: WillStatus;
@@ -42,7 +41,7 @@ type State = {
   publicKey: string | null;
   walletAddress: string | null;
 
-  /* accounts — null until hydrated from chain */
+  /* accounts */
   willAccount: WillAccount | null;
   vaultAccount: VaultAccount | null;
   heirs: Heir[];
@@ -50,9 +49,15 @@ type State = {
   /* ui */
   txPending: boolean;
 
+  /* stable setters — used in useAnchorProvider to avoid infinite loops */
+  setWillAccount: (will: WillAccount | null) => void;
+  setVaultAccount: (vault: VaultAccount | null) => void;
+  setHeirs: (heirs: Heir[]) => void;
+
   /* actions */
   setWallet: (key: string | null) => void;
   setTxPending: (v: boolean) => void;
+  setConnected: (v: boolean) => void;
 
   createWill: (intervalDays: number) => void;
   performCheckin: () => void;
@@ -61,7 +66,7 @@ type State = {
   addHeir: (heir: Omit<Heir, "id">) => void;
   updateHeir: (id: string, updates: Partial<Omit<Heir, "id">>) => void;
   removeHeir: (id: string) => void;
-  setConnected: (v: boolean) => void;
+
   depositAsset: (asset: {
     symbol: string;
     amount: number;
@@ -69,7 +74,6 @@ type State = {
     mint?: string;
     icon?: string;
   }) => void;
-
   withdrawAsset: (symbol: string, amount: number) => void;
 };
 
@@ -96,21 +100,25 @@ export const useWillStore = create<State>((set, get) => ({
   publicKey: null,
   walletAddress: null,
 
-  // ── Accounts — start null so the dashboard waits for chain data ──────────
-  // (The layout's `firstLoad` guard depends on both being null pre-hydration.
-  //  Do NOT seed these with fake data here.)
+  // ── Accounts ─────────────────────────────────────────────────────────────
   willAccount: null,
   vaultAccount: null,
   heirs: [],
 
   txPending: false,
 
+  // ── Stable setters (safe in useCallback deps) ─────────────────────────────
+  setWillAccount: (will) => set({ willAccount: will }),
+  setVaultAccount: (vault) => set({ vaultAccount: vault }),
+  setHeirs: (heirs) => set({ heirs }),
+
   // ── Wallet ───────────────────────────────────────────────────────────────
   setWallet: (key) =>
     set({ publicKey: key, walletAddress: key, connected: !!key }),
 
   setTxPending: (v) => set({ txPending: v }),
-  setConnected: (v: boolean) => set({ connected: v }),
+  setConnected: (v) => set({ connected: v }),
+
   // ── Will ─────────────────────────────────────────────────────────────────
   createWill: (intervalDays) =>
     set(() => {

@@ -1,36 +1,23 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import {
-    AnchorProvider,
-    BN,
-    Program,
-    type Idl,
-} from '@coral-xyz/anchor'
-import {
-    clusterApiUrl,
-    Connection,
-    PublicKey,
-    Transaction,
-} from '@solana/web3.js'
+import { AnchorProvider, BN, Program, type Idl } from '@coral-xyz/anchor'
+import { clusterApiUrl, Connection, PublicKey, Transaction } from '@solana/web3.js'
 import toast from 'react-hot-toast'
+import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 
 import IDL from '../idl/idl.json'
 import type { DeadWallet } from '../idl/idl'
 import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
-import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 
-const PROGRAM_ID = new PublicKey(
-    'uJ5ujCBYYNJ7V4Fpurewj9cDSPT3jHnEKLnaxYPYss9'
-)
-
+const PROGRAM_ID = new PublicKey('uJ5ujCBYYNJ7V4Fpurewj9cDSPT3jHnEKLnaxYPYss9')
 const WILL_SEED = Buffer.from('will')
-const VAULT_SEED = Buffer.from('vault')
+const HEIR_SEED = Buffer.from('heir')
 const RPC_URL = clusterApiUrl('devnet')
 
-export function useCreateWill() {
+export function useAddHeir() {
     const {
         raw,
         ready,
@@ -45,8 +32,12 @@ export function useCreateWill() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<Error | null>(null)
 
-    const createWill = useCallback(
-        async (intervalDays: number): Promise<boolean> => {
+    const addHeir = useCallback(
+        async (heirAddress: string, bps: number): Promise<boolean> => {
+            if (!raw || typeof raw.signAndSendTransaction !== 'function') {
+                toast.error('Wallet disconnected. Please reconnect.')
+                return false
+            }
             try {
                 if (!ready || walletLoading) {
                     toast.error('Wallet still loading...')
@@ -58,31 +49,37 @@ export function useCreateWill() {
                     return false
                 }
 
+                if (bps <= 0 || bps > 10000) {
+                    toast.error('BPS must be between 1 and 10000.')
+                    return false
+                }
+
+                let heirPk: PublicKey
+                try {
+                    heirPk = new PublicKey(heirAddress)
+                } catch {
+                    toast.error('Invalid heir address.')
+                    return false
+                }
+
                 const connection = new Connection(RPC_URL, 'confirmed')
 
-                const provider = new AnchorProvider(
-                    connection,
-                    raw,
-                    { commitment: 'confirmed' }
-                )
+                const provider = new AnchorProvider(connection, raw, {
+                    commitment: 'confirmed',
+                })
 
-                const program = new Program<DeadWallet>(
-                    IDL as Idl,
-                    provider
-                )
+                const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
-                const intervalSeconds = new BN(
-                    Math.floor(intervalDays * 86400)
-                )
 
+                // Derive PDAs
                 const [willPda] = PublicKey.findProgramAddressSync(
                     [WILL_SEED, ownerPk.toBuffer()],
                     PROGRAM_ID
                 )
 
-                const [vaultPda] = PublicKey.findProgramAddressSync(
-                    [VAULT_SEED, willPda.toBuffer()],
+                const [heirPda] = PublicKey.findProgramAddressSync(
+                    [HEIR_SEED, heirPk.toBuffer(), willPda.toBuffer()],
                     PROGRAM_ID
                 )
 
@@ -90,36 +87,36 @@ export function useCreateWill() {
                 setTxPending(true)
                 setError(null)
 
-                const toastId = toast.loading('Creating will...')
+                const toastId = toast.loading('Adding heir...')
 
-                // 1. Build the instruction
-                console.log('[createWill] building instruction...', {
+                console.log('[addHeir] building instruction...', {
                     ownerPk: ownerPk.toBase58(),
-                    intervalSeconds: intervalSeconds.toNumber(),
+                    heirPk: heirPk.toBase58(),
                     willPda: willPda.toBase58(),
-                    vaultPda: vaultPda.toBase58(),
+                    heirPda: heirPda.toBase58(),
+                    bps,
                 })
-                const ix = await program.methods
-                    .initialize(intervalSeconds)
-                    .accounts({ signer: ownerPk })
-                    .instruction()
-                console.log('[createWill] instruction built:', ix)
 
-                // 2. Fetch blockhash
-                console.log('[createWill] fetching blockhash...')
+                // IDL accounts: signer, heirAccount (PDA), willAccount (PDA), heirOriginalAddress, systemProgram
+                const ix = await program.methods
+                    .addHeirsToWill(bps)
+                    .accounts({
+                        signer: ownerPk,
+                        heirOriginalAddress: heirPk,
+                    })
+                    .instruction()
+
+                console.log('[addHeir] instruction built:', ix)
+
                 const { blockhash, lastValidBlockHeight } =
                     await connection.getLatestBlockhash('confirmed')
-                console.log('[createWill] blockhash:', blockhash)
 
-                // 3. Build transaction
                 const tx = new Transaction({
                     feePayer: ownerPk,
                     blockhash,
                     lastValidBlockHeight,
                 }).add(ix)
-                console.log('[createWill] transaction built, instructions:', tx.instructions.length)
 
-                // 4. Serialize
                 let serializedTx: Uint8Array
                 try {
                     serializedTx = new Uint8Array(
@@ -132,35 +129,26 @@ export function useCreateWill() {
                     throw serErr
                 }
 
-                console.log('[createWill] sending to Phantom for signing...')
-                let signature: string
-                try {
-                    const result = await raw.signAndSendTransaction({
-                        transaction: serializedTx,
-                        chain: 'solana:devnet',
-                    })
-                    signature = bs58.encode(result.signature)
-                    console.log('[createWill] Phantom returned signature:', signature)
-                    console.log('[createWill] Phantom returned signature:', signature)
-                } catch (signErr) {
-                    console.error('[createWill] Phantom rejected or errored:', signErr)
-                    console.error('[createWill] signErr name:', (signErr as any)?.name)
-                    console.error('[createWill] signErr message:', (signErr as any)?.message)
-                    console.error('[createWill] signErr code:', (signErr as any)?.code)
-                    throw signErr
-                }
+                console.log('[addHeir] sending to Phantom...')
+                const logs = await connection.simulateTransaction(tx)
+                console.log(logs)
 
-                // 6. Confirm
-                console.log('[createWill] confirming transaction...')
+                const result = await raw.signAndSendTransaction({
+                    transaction: serializedTx,
+                    chain: 'solana:devnet',
+                })
+                const signature = bs58.encode(result.signature)
+                console.log('[addHeir] signature:', signature)
+
                 await connection.confirmTransaction(
                     { signature, blockhash, lastValidBlockHeight },
                     'confirmed'
                 )
-                console.log('[createWill] confirmed!')
 
-                toast.success('Will created!', { id: toastId })
+                console.log('[addHeir] confirmed!')
+                toast.success('Heir added!', { id: toastId })
 
-                await refresh()
+                // await refresh()
 
                 return true
             } catch (err) {
@@ -177,14 +165,15 @@ export function useCreateWill() {
         [raw, ready, walletLoading, connected, publicKey, refresh, setTxPending]
     )
 
-    return { createWill, loading, error }
+    return { addHeir, loading, error }
 }
 
 function parseAnchorError(err: Error): string {
     const msg = err.message || ''
     if (msg.includes('User rejected')) return 'Transaction cancelled.'
-    if (msg.includes('already in use')) return 'Will already exists.'
+    if (msg.includes('already in use')) return 'Heir already added.'
     if (msg.includes('insufficient funds')) return 'Not enough SOL for fees.'
     if (msg.includes('signTransaction')) return 'Wallet cannot sign transaction.'
+    if (msg.includes('exceeds 10000')) return 'Total BPS would exceed 100%.'
     return msg
 }

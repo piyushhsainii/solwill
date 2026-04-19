@@ -16,6 +16,7 @@ import { useWillStore, type Asset } from '../../app/store/useWillStore'
 import IDL from '../idl/idl.json'
 import { DeadWallet } from '../idl/idl'
 import { useSollWillWallet } from './useSolWillWallet'
+import { UseAnchorProviderReturn } from '../utils/helper'
 
 const PROGRAM_ID = new PublicKey('uJ5ujCBYYNJ7V4Fpurewj9cDSPT3jHnEKLnaxYPYss9')
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com'
@@ -46,19 +47,11 @@ function deriveWillStatus(lastCheckIn: number, interval: number, claimed: boolea
     return 'Triggered'
 }
 
-export interface UseAnchorProviderReturn {
-    loading: boolean
-    error: Error | null
-    refresh: () => Promise<void>
-    program: Program<DeadWallet> | null
-    pdas: { willPda: PublicKey | null; vaultPda: PublicKey | null }
-}
+
+const storeActions = () => useWillStore.getState()
 
 export function useAnchorProvider(): UseAnchorProviderReturn {
     const wallet = useSollWillWallet()
-
-    const setWallet = useWillStore(s => s.setWallet)
-    const setState = useWillStore.setState
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
@@ -66,35 +59,32 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
 
     const willPdaRef = useRef<PublicKey | null>(null)
     const vaultPdaRef = useRef<PublicKey | null>(null)
+    const [Heirs, setHeirs] = useState<any[]>([])
 
-    /* ── 1. Build Anchor program + derive PDAs ───────────────────── */
     useEffect(() => {
+
         if (!wallet.ready || wallet.loading) {
             setLoading(true)
             return
         }
 
         if (wallet.address) {
-            setState({ connected: true })
-            setWallet(wallet.address)
+            storeActions().setConnected(true)
+            storeActions().setWallet(wallet.address)
         }
 
         if (!wallet.address || !wallet.publicKey || !wallet.raw) {
             setLoading(false)
             return
         }
-
+        console.log(`Wallet`, wallet)
         const init = async () => {
             try {
                 setLoading(true)
                 setError(null)
 
                 const conn = new Connection(RPC_URL, 'confirmed')
-
-                const provider = new AnchorProvider(conn, wallet.raw as any, {
-                    commitment: 'confirmed',
-                })
-
+                const provider = new AnchorProvider(conn, wallet.raw as any, { commitment: 'confirmed' })
                 const prog = new Program<DeadWallet>(IDL as any, provider)
 
                 const [willPda] = PublicKey.findProgramAddressSync(
@@ -105,14 +95,24 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                     [VAULT_SEED, willPda.toBuffer()],
                     PROGRAM_ID,
                 )
-
+                const heirAccounts = await prog?.account.heir.all()
+                console.log(`heir accounts`, heirAccounts)
+                heirAccounts && storeActions().setHeirs(heirAccounts.map(({ publicKey, account }: any) => ({
+                    id: publicKey.toBase58(),
+                    walletAddress: (account.walletAddress as PublicKey).toBase58(),
+                    shareBps: (account.bps / 100) as number,
+                    onChain: true,
+                })))
                 willPdaRef.current = willPda
                 vaultPdaRef.current = vaultPda
-
-                console.log('[useAnchorProvider] ready:', {
-                    willPda: willPda.toBase58(),
-                    vaultPda: vaultPda.toBase58(),
-                })
+                setHeirs(heirAccounts.map(({ publicKey, account }: any) => ({
+                    id: publicKey.toBase58(),
+                    walletAddress: (account.walletAddress as PublicKey).toBase58(),
+                    shareBps: (account.bps / 100) as number,
+                    onChain: true,
+                })))
+                willPdaRef.current = willPda
+                vaultPdaRef.current = vaultPda
 
                 setProgram(prog)
             } catch (e) {
@@ -125,22 +125,11 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
         }
 
         init()
-    }, [wallet.ready, wallet.loading, wallet.address, wallet.publicKey, wallet.raw])
-
+    }, [wallet.ready, wallet.address])
     /* ── 2. Fetch on-chain state ─────────────────────────────────── */
     const refresh = useCallback(async () => {
-        if (!wallet.ready || !program || !wallet.publicKey || !willPdaRef.current || !vaultPdaRef.current) {
-            console.warn('[refresh] skipped — not ready', {
-                ready: wallet.ready,
-                program: !!program,
-                publicKey: wallet.publicKey?.toBase58(),
-                willPda: willPdaRef.current?.toBase58(),
-                vaultPda: vaultPdaRef.current?.toBase58(),
-            })
-            return
-        }
+        if (!wallet.ready || !program || !wallet.publicKey || !willPdaRef.current || !vaultPdaRef.current) return
 
-        const ownerPk = wallet.publicKey
         const willPda = willPdaRef.current
         const vaultPda = vaultPdaRef.current
         const conn = program.provider.connection
@@ -149,36 +138,31 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
         setError(null)
 
         try {
-            /* ── WillAccount ──────────────────────────────────────── */
             let willData: WillAccountData | null = null
             try {
                 willData = await (program.account as any).willAccount.fetch(willPda) as WillAccountData
             } catch {
-                setState({ willAccount: null })
+                storeActions().setWillAccount(null)
             }
 
             if (willData) {
                 const lastCheckIn = (willData.lastCheckIn as BN).toNumber()
                 const interval = (willData.interval as BN).toNumber()
-                setState({
-                    willAccount: {
-                        lastCheckin: lastCheckIn,
-                        interval,
-                        nextCheckin: lastCheckIn + interval,
-                        createdAt: lastCheckIn,
-                        status: deriveWillStatus(lastCheckIn, interval, willData.claimed as boolean),
-                    },
+                storeActions().setWillAccount({
+                    lastCheckin: lastCheckIn,
+                    interval,
+                    nextCheckin: lastCheckIn + interval,
+                    createdAt: lastCheckIn,
+                    status: deriveWillStatus(lastCheckIn, interval, willData.claimed as boolean),
                 })
             }
 
-            /* ── Vault SOL balance ────────────────────────────────── */
             let solBalance = 0
             try {
                 const vaultData = await (program.account as any).vault.fetch(vaultPda) as VaultData
                 solBalance = (vaultData.solBalance as BN).toNumber() / LAMPORTS_PER_SOL
-            } catch { /* vault not initialised yet */ }
+            } catch { }
 
-            /* ── SPL assets ───────────────────────────────────────── */
             const splAssets: Asset[] = []
             if (willData && Array.isArray((willData as any).assets)) {
                 const rawAssets = (willData as any).assets as Array<{ mint: PublicKey; balance: BN }>
@@ -188,70 +172,34 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                     let decimals = meta?.decimals ?? 6
                     try { decimals = (await getMint(conn, mint)).decimals } catch { }
                     const amount = balance.toNumber() / Math.pow(10, decimals)
-                    let usdPrice = 0
-                    try {
-                        const json = await (await fetch(`https://price.jup.ag/v6/price?ids=${mintStr}`)).json()
-                        usdPrice = json?.data?.[mintStr]?.price ?? 0
-                    } catch { }
                     splAssets.push({
                         symbol: meta?.symbol ?? mintStr.slice(0, 6),
                         mint: mintStr,
                         amount,
-                        usdPrice,
-                        usdValue: amount * usdPrice,
+                        usdPrice: 0,
+                        usdValue: 0,
                         icon: meta?.icon,
                     })
                 }))
             }
 
-            /* ── SOL USD price ────────────────────────────────────── */
-            let solUsdPrice = 0
-            try {
-                const json = await (await fetch(
-                    'https://price.jup.ag/v6/price?ids=So11111111111111111111111111111111111111112'
-                )).json()
-                solUsdPrice = json?.data?.['So11111111111111111111111111111111111111112']?.price ?? 0
-            } catch { }
-
-            const solAsset: Asset = {
-                symbol: 'SOL',
-                amount: solBalance,
-                usdPrice: solUsdPrice,
-                usdValue: solBalance * solUsdPrice,
-            }
+            const solAsset: Asset = { symbol: 'SOL', amount: solBalance, usdPrice: 0, usdValue: 0 }
             const allAssets = [solAsset, ...splAssets].filter(a => a.amount > 0)
 
-            setState({
-                vaultAccount: {
-                    sol: solBalance,
-                    usdc: splAssets.find(a => a.symbol === 'USDC')?.amount ?? 0,
-                    totalUsdValue: allAssets.reduce((s, a) => s + a.usdValue, 0),
-                    assets: allAssets,
-                },
+            storeActions().setVaultAccount({
+                sol: solBalance,
+                usdc: splAssets.find(a => a.symbol === 'USDC')?.amount ?? 0,
+                totalUsdValue: 0,
+                assets: allAssets,
             })
 
-            /* ── Heirs ────────────────────────────────────────────── */
-            const heirAccounts = await conn.getProgramAccounts(PROGRAM_ID, {
-                commitment: 'confirmed',
-                filters: [
-                    { memcmp: { offset: 0, bytes: bs58Encode(HEIR_DISCRIMINATOR) } },
-                    { memcmp: { offset: 10, bytes: ownerPk.toBase58() } },
-                ],
-            })
-
-            setState({
-                heirs: heirAccounts.map(({ pubkey, account }) => {
-                    const decoded = (program.account as any).heir.coder.accounts.decode(
-                        'heir',
-                        account.data
-                    ) as HeirData
-                    return {
-                        id: pubkey.toBase58(),
-                        walletAddress: (decoded.walletAddress as PublicKey).toBase58(),
-                        shareBps: decoded.bps as number,
-                    }
-                }),
-            })
+            const heirAccounts = await (program.account as any).heir.all()
+            storeActions().setHeirs(heirAccounts.map(({ publicKey, account }: any) => ({
+                id: publicKey.toBase58(),
+                walletAddress: (account.walletAddress as PublicKey).toBase58(),
+                shareBps: (account.bps / 100) as number,
+                onChain: true,
+            })))
 
         } catch (err) {
             const e = err instanceof Error ? err : new Error(String(err))
@@ -260,32 +208,25 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
         } finally {
             setLoading(false)
         }
-    }, [wallet.ready, wallet.publicKey, program, setState])
+    }, [wallet.ready, wallet.publicKey, program])
+    const hasInitialFetched = useRef(false)
 
-    /* ── 3. Auto-refresh once program + PDAs are ready ──────────── */
+    /* ── 3. Auto-refresh once — only on first ready ──────────── */
     useEffect(() => {
         if (
             wallet.ready &&
-            wallet.connected &&
-            program &&
             wallet.address &&
+            program &&
             willPdaRef.current &&
-            vaultPdaRef.current
+            vaultPdaRef.current &&
+            !hasInitialFetched.current  // ← gate: only run once
         ) {
+            hasInitialFetched.current = true
             refresh()
         }
-    }, [wallet.ready, wallet.connected, wallet.address, program])
+    }, [wallet.ready, wallet.address, program])
 
-    return {
-        loading,
-        error,
-        refresh,
-        program,
-        pdas: {
-            willPda: willPdaRef.current,
-            vaultPda: vaultPdaRef.current,
-        },
-    }
+    return { loading, error, refresh, program, pdas: { willPda: willPdaRef.current, vaultPda: vaultPdaRef.current }, Heirs }
 }
 
 /* ─── bs58 encode ───────────────────────────────────────────────── */

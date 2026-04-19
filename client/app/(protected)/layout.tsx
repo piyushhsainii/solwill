@@ -1,14 +1,13 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePrivy } from '@privy-io/react-auth'
 import { useWillStore } from '@/app/store/useWillStore'
-import { useAnchorProvider, type UseAnchorProviderReturn } from '@/lib/hooks/useAnchorProvider'
-import { useSollWillWallet } from '@/lib/hooks/useSolWillWallet'
+import { useAnchorProvider } from '@/lib/hooks/useAnchorProvider'
 import Sidebar from '@/components/ui/sidebar'
 import FullScreenSpinner from '@/components/ui/full-screen-spinner'
-import { useWallets } from '@privy-io/react-auth/solana'
+import { UseAnchorProviderReturn } from '@/lib/utils/helper'
 
 const AnchorCtx = createContext<Pick<UseAnchorProviderReturn, 'refresh' | 'program' | 'pdas'>>({
     refresh: async () => { },
@@ -32,45 +31,25 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     return <HydratedLayout>{children}</HydratedLayout>
 }
 
-// How many renders to wait before giving up on wallet population.
-// Wallet typically populates within 1–2 renders, 5 is a safe ceiling.
-const WALLET_SETTLE_RENDERS = 5
-
 function HydratedLayout({ children }: { children: React.ReactNode }) {
-    const { loading, error, program, pdas, refresh } = useAnchorProvider()
+    const { loading, error, program, pdas, refresh, Heirs } = useAnchorProvider()
     const { authenticated, user } = usePrivy()
     const willAccount = useWillStore(s => s.willAccount)
     const vaultAccount = useWillStore(s => s.vaultAccount)
-    const { setConnected } = useWillStore()
+    const heirs = useWillStore(s => s.setHeirs)
+    heirs(Heirs);
 
-
-    const [renderCount, setRenderCount] = useState(0)
-
+    // Set connected once on mount — use getState() to avoid selector instability
     useEffect(() => {
-        if (!authenticated || !user?.wallet?.address) {
-            setRenderCount(prev => prev + 1)
+        if (authenticated) {
+            useWillStore.getState().setConnected(true)
         }
-    })
+    }, [authenticated])
 
-    const walletSettled =
-        (authenticated && !!user?.wallet?.address) ||  // wallet is ready
-        renderCount >= WALLET_SETTLE_RENDERS          // or we've waited long enough
-
+    // Still loading chain data for the first time
     const firstLoad = loading && willAccount === null && vaultAccount === null
 
-    // Without this, wallet.connected is false on render 1 even if it's about to be true.
-    if (!walletSettled) {
-        return <FullScreenSpinner label="Connecting wallet…" />
-    }
-
-    // After settling, if still not connected, the wallet is genuinely absent
-    if (!authenticated || !user?.wallet?.address) {
-        // You could redirect to /connect here, or show an error state
-        return <FullScreenSpinner label="No wallet found — reconnecting…" />
-    }
-    useEffect(() => {
-        if (authenticated) setConnected(true)
-    }, [authenticated])
+    if (!user?.wallet?.address) return <FullScreenSpinner label="Connecting wallet…" />
     if (firstLoad) return <FullScreenSpinner label="Loading your will…" />
 
     return (

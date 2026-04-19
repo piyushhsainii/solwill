@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Check } from "lucide-react"
+import { X, Plus, Check, Loader2 } from "lucide-react"
 import { Heir } from "@/lib/utils/helper"
 
 const slideRight = {
@@ -66,6 +66,7 @@ function AllocationRing({ pct }: { pct: number }) {
         </svg>
     )
 }
+type HeirStatus = 'idle' | 'pending' | 'success' | 'error'
 
 export default function AddHeirsStep({
     heirs,
@@ -80,7 +81,9 @@ export default function AddHeirsStep({
     onAdd: (address: string, share: number) => void
     onUpdate: (id: string, address: string, share: number) => void
     onRemove: (id: string) => void
-    onComplete: () => void
+    onComplete: (
+        onHeirStatus: (id: string, status: HeirStatus) => void
+    ) => Promise<void>
     isLoading: boolean
     dir: 'forward' | 'back'
 }) {
@@ -91,12 +94,17 @@ export default function AddHeirsStep({
     const [editAddr, setEditAddr] = useState('')
     const [editShare, setEditShare] = useState(0)
     const [focused, setFocused] = useState(false)
+    const [heirStatuses, setHeirStatuses] = useState<Record<string, HeirStatus>>({})
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     const totalAllocated = heirs.reduce((s, h) => s + h.shareBps, 0)
     const remaining = 100 - totalAllocated
     const effectiveShare = Math.max(0, Math.min(share, remaining <= 0 ? 0 : remaining))
-    const canProceed = heirs.length > 0 && totalAllocated === 100
+    const canProceed = heirs.length > 0 && totalAllocated === 100 && !isSubmitting
     const canAdd = address.trim().length >= 32 && effectiveShare > 0
+
+    const successCount = Object.values(heirStatuses).filter(s => s === 'success').length
+    const hasAnyStatus = Object.keys(heirStatuses).length > 0
 
     const handleAdd = () => {
         if (!address.trim()) return setError('Wallet address required')
@@ -106,6 +114,18 @@ export default function AddHeirsStep({
         onAdd(address.trim(), effectiveShare)
         setAddress('')
         setShare(remaining - effectiveShare > 0 ? remaining - effectiveShare : 1)
+    }
+
+    const handleComplete = async () => {
+        setIsSubmitting(true)
+        // Reset all to idle first
+        setHeirStatuses(Object.fromEntries(heirs.map(h => [h.id, 'idle'])))
+
+        await onComplete((id, status) => {
+            setHeirStatuses(prev => ({ ...prev, [id]: status }))
+        })
+
+        setIsSubmitting(false)
     }
 
     const variants = dir === 'forward' ? slideRight : slideLeft
@@ -319,50 +339,40 @@ export default function AddHeirsStep({
                                 marginBottom: 20,
                             }}
                         >
-                            {heirs.map((heir, idx) => (
-                                <motion.div
-                                    key={heir.id}
-                                    layout
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                                >
-                                    <div style={{
-                                        padding: '13px 16px',
-                                        borderBottom: idx < heirs.length - 1
-                                            ? '1px solid var(--border)'
-                                            : 'none',
-                                        background: 'var(--surface)',
-                                    }}>
-                                        {editingId === heir.id ? (
-                                            /* Edit mode */
-                                            <motion.div
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-                                            >
-                                                <input
-                                                    value={editAddr}
-                                                    onChange={e => setEditAddr(e.target.value)}
-                                                    style={{
-                                                        padding: '10px 12px', borderRadius: 10,
-                                                        border: '1px solid var(--border)',
-                                                        background: 'transparent',
-                                                        color: 'var(--text-primary)',
-                                                        fontSize: 12, outline: 'none',
-                                                        fontFamily: 'inherit',
-                                                    }}
-                                                />
-                                                <div style={{ display: 'flex', gap: 8 }}>
+                            {heirs.map((heir, idx) => {
+                                const status = heirStatuses[heir.id] ?? 'idle'
+                                return (
+                                    <motion.div
+                                        key={heir.id}
+                                        layout
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                                    >
+                                        <div style={{
+                                            padding: '13px 16px',
+                                            borderBottom: idx < heirs.length - 1
+                                                ? '1px solid var(--border)' : 'none',
+                                            background: status === 'success'
+                                                ? 'rgba(67,209,122,0.04)'
+                                                : status === 'error'
+                                                    ? 'rgba(239,68,68,0.04)'
+                                                    : 'var(--surface)',
+                                            transition: 'background 0.3s',
+                                        }}>
+                                            {editingId === heir.id ? (
+                                                /* keep your existing edit mode JSX unchanged */
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                                                >
                                                     <input
-                                                        type="number"
-                                                        value={editShare}
-                                                        min={1} max={100}
-                                                        onChange={e => setEditShare(Number(e.target.value))}
+                                                        value={editAddr}
+                                                        onChange={e => setEditAddr(e.target.value)}
                                                         style={{
-                                                            flex: 1, padding: '10px 12px',
-                                                            borderRadius: 10,
+                                                            padding: '10px 12px', borderRadius: 10,
                                                             border: '1px solid var(--border)',
                                                             background: 'transparent',
                                                             color: 'var(--text-primary)',
@@ -370,112 +380,137 @@ export default function AddHeirsStep({
                                                             fontFamily: 'inherit',
                                                         }}
                                                     />
-                                                    <button
-                                                        onClick={() => {
-                                                            onUpdate(heir.id, editAddr, editShare)
-                                                            setEditingId(null)
-                                                        }}
-                                                        style={{
-                                                            padding: '10px 16px', borderRadius: 10,
-                                                            border: 'none', background: 'var(--primary)',
-                                                            color: 'white', fontSize: 12,
-                                                            cursor: 'pointer', fontFamily: 'inherit',
-                                                        }}
-                                                    >
-                                                        Save
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingId(null)}
-                                                        style={{
-                                                            padding: '10px 14px', borderRadius: 10,
-                                                            border: '1px solid var(--border)',
-                                                            background: 'transparent',
-                                                            color: 'var(--text-secondary)',
-                                                            fontSize: 12, cursor: 'pointer',
-                                                            fontFamily: 'inherit',
-                                                        }}
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        ) : (
-                                            /* View mode */
-                                            <div style={{
-                                                display: 'flex', alignItems: 'center', gap: 12,
-                                            }}>
-                                                <HeirAvatar address={heir.walletAddress} />
-
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{
-                                                        fontSize: 12, color: 'var(--text-primary)',
-                                                        letterSpacing: '-0.01em',
-                                                        overflow: 'hidden', textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
-                                                    }}>
-                                                        {heir.walletAddress.slice(0, 6)}…{heir.walletAddress.slice(-4)}
+                                                    <div style={{ display: 'flex', gap: 8 }}>
+                                                        <input
+                                                            type="number"
+                                                            value={editShare}
+                                                            min={1} max={100}
+                                                            onChange={e => setEditShare(Number(e.target.value))}
+                                                            style={{
+                                                                flex: 1, padding: '10px 12px', borderRadius: 10,
+                                                                border: '1px solid var(--border)',
+                                                                background: 'transparent',
+                                                                color: 'var(--text-primary)',
+                                                                fontSize: 12, outline: 'none',
+                                                                fontFamily: 'inherit',
+                                                            }}
+                                                        />
+                                                        <button onClick={() => { onUpdate(heir.id, editAddr, editShare); setEditingId(null) }}
+                                                            style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: 'var(--primary)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                            Save
+                                                        </button>
+                                                        <button onClick={() => setEditingId(null)}
+                                                            style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                            Cancel
+                                                        </button>
                                                     </div>
+                                                </motion.div>
+                                            ) : (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    <HeirAvatar address={heir.walletAddress} />
+
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{
+                                                            fontSize: 12, color: 'var(--text-primary)',
+                                                            letterSpacing: '-0.01em',
+                                                            overflow: 'hidden', textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                        }}>
+                                                            {heir.walletAddress.slice(0, 6)}…{heir.walletAddress.slice(-4)}
+                                                        </div>
+                                                        <div style={{
+                                                            fontSize: 11, color: 'var(--text-secondary)',
+                                                            marginTop: 2, letterSpacing: '-0.01em',
+                                                        }}>
+                                                            {heir.shareBps}% share
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Share pill */}
                                                     <div style={{
-                                                        fontSize: 11, color: 'var(--text-secondary)',
-                                                        marginTop: 2, letterSpacing: '-0.01em',
+                                                        padding: '4px 10px', borderRadius: 999,
+                                                        background: 'var(--primary)',
+                                                        color: 'white', fontSize: 11, fontWeight: 600,
+                                                        letterSpacing: '-0.01em', flexShrink: 0,
                                                     }}>
-                                                        {heir.shareBps}% share
+                                                        {heir.shareBps}%
+                                                    </div>
+
+                                                    {/* Status indicator OR action buttons */}
+                                                    <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+                                                        {status === 'pending' && (
+                                                            <motion.div
+                                                                animate={{ rotate: 360 }}
+                                                                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                                                style={{ display: 'flex' }}
+                                                            >
+                                                                <Loader2 size={16} color="var(--text-secondary)" />
+                                                            </motion.div>
+                                                        )}
+                                                        {status === 'success' && (
+                                                            <motion.div
+                                                                initial={{ scale: 0 }}
+                                                                animate={{ scale: 1 }}
+                                                                transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+                                                                style={{
+                                                                    width: 22, height: 22, borderRadius: '50%',
+                                                                    background: '#43d17a',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                }}
+                                                            >
+                                                                <Check size={12} color="white" strokeWidth={3} />
+                                                            </motion.div>
+                                                        )}
+                                                        {status === 'error' && (
+                                                            <motion.div
+                                                                initial={{ scale: 0 }}
+                                                                animate={{ scale: 1 }}
+                                                                style={{
+                                                                    width: 22, height: 22, borderRadius: '50%',
+                                                                    background: 'rgba(239,68,68,0.1)',
+                                                                    border: '1px solid rgba(239,68,68,0.3)',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    fontSize: 11, color: '#ef4444', fontWeight: 700,
+                                                                }}
+                                                            >
+                                                                !
+                                                            </motion.div>
+                                                        )}
+                                                        {status === 'idle' && !isSubmitting && (
+                                                            <>
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
+                                                                    onClick={() => { setEditingId(heir.id); setEditAddr(heir.walletAddress); setEditShare(heir.shareBps) }}
+                                                                    style={{
+                                                                        width: 30, height: 30, borderRadius: 8,
+                                                                        border: '1px solid var(--border)',
+                                                                        background: 'transparent', cursor: 'pointer',
+                                                                        fontSize: 11, color: 'var(--text-secondary)',
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    }}
+                                                                >✎</motion.button>
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
+                                                                    onClick={() => onRemove(heir.id)}
+                                                                    style={{
+                                                                        width: 30, height: 30, borderRadius: 8,
+                                                                        border: '1px solid rgba(239,68,68,0.2)',
+                                                                        background: 'rgba(239,68,68,0.06)',
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    <X size={13} color="#ef4444" strokeWidth={2.5} />
+                                                                </motion.button>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
-
-                                                {/* Share pill */}
-                                                <div style={{
-                                                    padding: '4px 10px', borderRadius: 999,
-                                                    background: 'var(--primary)',
-                                                    color: 'white', fontSize: 11, fontWeight: 600,
-                                                    letterSpacing: '-0.01em', flexShrink: 0,
-                                                }}>
-                                                    {heir.shareBps}%
-                                                </div>
-
-                                                {/* Actions */}
-                                                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                                    <motion.button
-                                                        whileHover={{ scale: 1.08 }}
-                                                        whileTap={{ scale: 0.94 }}
-                                                        onClick={() => {
-                                                            setEditingId(heir.id)
-                                                            setEditAddr(heir.walletAddress)
-                                                            setEditShare(heir.shareBps)
-                                                        }}
-                                                        style={{
-                                                            width: 30, height: 30, borderRadius: 8,
-                                                            border: '1px solid var(--border)',
-                                                            background: 'transparent',
-                                                            cursor: 'pointer', fontSize: 11,
-                                                            color: 'var(--text-secondary)',
-                                                            display: 'flex', alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                        }}
-                                                    >
-                                                        ✎
-                                                    </motion.button>
-                                                    <motion.button
-                                                        whileHover={{ scale: 1.08 }}
-                                                        whileTap={{ scale: 0.94 }}
-                                                        onClick={() => onRemove(heir.id)}
-                                                        style={{
-                                                            width: 30, height: 30, borderRadius: 8,
-                                                            border: '1px solid rgba(239,68,68,0.2)',
-                                                            background: 'rgba(239,68,68,0.06)',
-                                                            cursor: 'pointer',
-                                                            display: 'flex', alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                        }}
-                                                    >
-                                                        <X size={13} color="#ef4444" strokeWidth={2.5} />
-                                                    </motion.button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </motion.div>
-                            ))}
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                )
+                            })}
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -534,33 +569,31 @@ export default function AddHeirsStep({
                     whileHover={canProceed ? { y: -1 } : {}}
                     whileTap={canProceed ? { scale: 0.985 } : {}}
                     disabled={!canProceed || isLoading}
-                    onClick={onComplete}
+                    onClick={handleComplete}
                     style={{
-                        width: '100%',
-                        padding: '14px 18px',
-                        borderRadius: 16,
+                        width: '100%', padding: '14px 18px', borderRadius: 16,
                         border: 'none',
                         background: canProceed ? 'var(--primary)' : 'var(--border)',
                         color: canProceed ? 'white' : 'var(--text-secondary)',
-                        fontSize: 14,
-                        fontWeight: 500,
-                        letterSpacing: '-0.025em',
+                        fontSize: 14, fontWeight: 500, letterSpacing: '-0.025em',
                         cursor: canProceed ? 'pointer' : 'not-allowed',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        transition: 'background 0.2s, color 0.2s',
-                        fontFamily: 'inherit',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: 8, fontFamily: 'inherit',
                     }}
                 >
-                    {isLoading ? (
-                        'Saving…'
-                    ) : canProceed ? (
+                    {isSubmitting ? (
                         <>
-                            <Check size={15} strokeWidth={2.5} />
-                            Confirm beneficiaries
+                            <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                                style={{ display: 'flex' }}
+                            >
+                                <Loader2 size={15} color="white" />
+                            </motion.div>
+                            {`Adding heirs… ${successCount}/${heirs.length}`}
                         </>
+                    ) : canProceed ? (
+                        <><Check size={15} strokeWidth={2.5} />Confirm beneficiaries</>
                     ) : (
                         'Confirm beneficiaries'
                     )}
@@ -568,5 +601,6 @@ export default function AddHeirsStep({
 
             </motion.div>
         </motion.div>
+
     )
 }
