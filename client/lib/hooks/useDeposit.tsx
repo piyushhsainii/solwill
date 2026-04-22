@@ -7,9 +7,10 @@ import {
     Connection,
     LAMPORTS_PER_SOL,
     PublicKey,
+    SystemProgram,
     Transaction,
 } from '@solana/web3.js'
-import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import toast from 'react-hot-toast'
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 
@@ -26,7 +27,7 @@ const RPC_URL = clusterApiUrl('devnet')
 
 /* ─── shared tx helper ───────────────────────────────────────────── */
 import { VersionedTransaction, TransactionMessage } from '@solana/web3.js'
-import { buildAndSend } from '../utils/helper'
+import { buildAndSend, getTokenProgramForMint } from '../utils/helper'
 
 
 
@@ -54,7 +55,7 @@ export function useDepositSOL() {
                 if (amountSol <= 0) { toast.error('Amount must be greater than 0'); return false }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
@@ -166,8 +167,8 @@ export function useDepositSPL() {
                 if (amountRaw <= 0) { toast.error('Amount must be greater than 0'); return false }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
-                const program = new Program<DeadWallet>(IDL as Idl, provider)
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
+                const program: Program<DeadWallet> = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
                 const amount = new BN(amountRaw)
@@ -188,20 +189,40 @@ export function useDepositSPL() {
                 console.log('[depositSPL] willPda:', willPda.toBase58())
                 console.log('[depositSPL] vaultPda:', vaultPda.toBase58())
 
+                const tokenProgram = await getTokenProgramForMint(connection, mint)
                 const toastId = toast.loading('Depositing token...')
+
+                const [ownerAta] = PublicKey.findProgramAddressSync([ownerPk.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()], ASSOCIATED_TOKEN_PROGRAM_ID)
+                console.log(`OWNER ATA`, ownerAta.toBase58())
+
+                const [vaultAta] = PublicKey.findProgramAddressSync([vaultPda.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()], ASSOCIATED_TOKEN_PROGRAM_ID)
+                console.log(`VAULT ATA`, vaultAta.toBase58())
 
                 // Anchor resolves ownerAta and vaultAta automatically from the IDL seeds
                 const ix = await program.methods
                     .depositSplTokens(amount)
-                    .accounts({
+                    .accountsPartial({
                         owner: ownerPk,
                         mint: mint,
-                        tokenProgram: TOKEN_PROGRAM_ID
+                        ownerAta,
+                        vaultAta: vaultAta,
+                        vault: vaultPda,
+                        willAccount: willPda,
+                        systemProgram: SystemProgram.programId,
+                        tokenProgram: tokenProgram,
+                        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                     })
                     .instruction()
+                const bx = await connection.getLatestBlockhash('confirmed')
+                const tx = new Transaction({
+                    feePayer: ownerPk,
+                    blockhash: bx.blockhash,
+                    lastValidBlockHeight: bx.lastValidBlockHeight
 
-                const sig = await buildAndSend(raw, connection, ix, ownerPk)
-                console.log('[depositSPL] confirmed:', sig)
+                }).add(ix)
+                const logs = await connection.simulateTransaction(tx)
+                // const sig = await buildAndSend(raw, connection, ix, ownerPk)
+                console.log('[depositSPL] confirmed:', logs)
 
                 toast.success('Token deposited!', { id: toastId })
                 await refresh()

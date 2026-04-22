@@ -8,13 +8,12 @@ import { useCheckinWill } from '@/lib/hooks/useCheckInWill'
 interface Props {
     txPending: boolean
     checkinAnim: boolean
-    onCheckin: () => void
     nextVerificationTimestamp: string
     lastCheckin?: number
     intervalSeconds?: number
 }
 
-const HOLD_DURATION = 3000 // ms to hold before triggering
+const HOLD_DURATION = 1500 // ms to hold before triggering
 
 function ProtectionStatusCard({
     nextVerificationTimestamp,

@@ -5,9 +5,9 @@ import { useState } from 'react'
 import styles from './PhoneMockup.module.css'
 
 const assets = [
-  { name: 'SOL',           val: '12.5 SOL',  tag: null },
-  { name: 'USDC',          val: '500 USDC',  tag: null },
-  { name: 'Mad Lads #4821', val: null,        tag: 'NFT' },
+  { name: 'SOL', val: '12.5 SOL', tag: null },
+  { name: 'USDC', val: '500 USDC', tag: null },
+  { name: 'Mad Lads #4821', val: null, tag: 'NFT' },
 ]
 
 const heirs = [
@@ -17,8 +17,8 @@ const heirs = [
 
 export default function PhoneMockup() {
   const [checked, setChecked] = useState(false)
-  const [days, setDays]       = useState(67)
-  const controls              = useAnimationControls()
+  const [days, setDays] = useState(67)
+  const controls = useAnimationControls()
 
   async function handleCheckin() {
     if (checked) return
@@ -73,7 +73,7 @@ export default function PhoneMockup() {
             className={styles.ringDays}
             key={days}
             initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1,   opacity: 1 }}
+            animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
           >
             {days}d
@@ -87,7 +87,7 @@ export default function PhoneMockup() {
         animate={controls}
         whileTap={{ scale: 0.97 }}
         onClick={handleCheckin}
-        style={{ background: checked ? '#0F6E56' : 'var(--ink)' }}
+        style={{ background: checked ? '#0F6E56' : '#000000' }}
       >
         {checked ? '✓ Checked in' : 'Check in now'}
       </motion.button>
@@ -105,8 +105,8 @@ export default function PhoneMockup() {
           transition={{ delay: 0.5 + i * 0.07, duration: 0.4, ease: 'easeOut' }}
         >
           <span className={styles.assetName}>{a.name}</span>
-          {a.val  && <span className={styles.assetVal}>{a.val}</span>}
-          {a.tag  && <span className={styles.assetTag}>{a.tag}</span>}
+          {a.val && <span className={styles.assetVal}>{a.val}</span>}
+          {a.tag && <span className={styles.assetTag}>{a.tag}</span>}
         </motion.div>
       ))}
 

@@ -38,8 +38,11 @@ function HydratedLayout({ children }: { children: React.ReactNode }) {
     const { authenticated, user } = usePrivy()
     const willAccount = useWillStore(s => s.willAccount)
     const vaultAccount = useWillStore(s => s.vaultAccount)
-    const heirs = useWillStore(s => s.setHeirs)
-    heirs(Heirs);
+    useEffect(() => {
+        if (Heirs !== undefined) {
+            useWillStore.getState().setHeirs(Heirs)
+        }
+    }, [Heirs])
 
     // Set connected once on mount — use getState() to avoid selector instability
     useEffect(() => {

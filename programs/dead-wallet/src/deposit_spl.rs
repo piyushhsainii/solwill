@@ -1,5 +1,5 @@
 use anchor_lang::{ prelude::*, system_program::{self, Transfer}};
-use anchor_spl::{associated_token::AssociatedToken, token::{TransferChecked, transfer_checked}, token_interface::{Mint, TokenAccount, TokenInterface}};
+use anchor_spl::{associated_token::AssociatedToken, token::{TransferChecked, transfer_checked}, token_interface::{Mint, TokenAccount, TokenInterface,}};
 
 use crate::{states::{SPLTOKENS, Vault, WillAccount}, error::Errors};
 use crate::Errors::{LowBalance,Accounts_Not_Provided,Unauthorised_Depositor};

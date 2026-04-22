@@ -3,9 +3,11 @@ import { DeadWallet } from "../idl/idl";
 import {
   Connection,
   PublicKey,
+  Transaction,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 export const fadeUp = {
@@ -51,27 +53,117 @@ export async function buildAndSend(
   const { blockhash, lastValidBlockHeight } =
     await connection.getLatestBlockhash("confirmed");
 
-  // ✅ Build as VersionedTransaction — what Privy expects
-  const message = new TransactionMessage({
-    payerKey: ownerPk,
-    recentBlockhash: blockhash,
-    instructions: [ix],
-  }).compileToV0Message();
+  // Build transaction
+  const tx = new Transaction({
+    feePayer: ownerPk,
+    blockhash,
+    lastValidBlockHeight,
+  }).add(ix);
 
-  const tx = new VersionedTransaction(message);
+  // Serialize
+  let serializedTx: Uint8Array;
+  try {
+    serializedTx = new Uint8Array(
+      tx.serialize({ requireAllSignatures: false, verifySignatures: false }),
+    );
+    console.log(
+      "[checkinWill] serialized tx byteLength:",
+      serializedTx.byteLength,
+    );
+  } catch (serErr) {
+    console.error("[checkinWill] serialization failed:", serErr);
+    throw serErr;
+  }
 
-  // Privy's signAndSendTransaction with versioned tx
-  const { signature: rawSig } = await raw.signAndSendTransaction({
-    transaction: tx,
-    chain: "solana:devnet",
-  });
+  // Send to Phantom
+  console.log("[checkinWill] sending to Phantom for signing...");
+  let signature: string;
+  try {
+    const result = await raw.signAndSendTransaction({
+      transaction: serializedTx,
+      chain: "solana:devnet",
+    });
+    signature = bs58.encode(result.signature);
+    console.log("[checkinWill] Phantom returned signature:", signature);
+  } catch (signErr) {
+    console.error("[checkinWill] Phantom rejected or errored:", signErr);
+    console.error("[checkinWill] signErr name:", (signErr as any)?.name);
+    console.error("[checkinWill] signErr message:", (signErr as any)?.message);
+    console.error("[checkinWill] signErr code:", (signErr as any)?.code);
+    throw signErr;
+  }
 
-  const signature = typeof rawSig === "string" ? rawSig : bs58.encode(rawSig);
-
+  // Confirm
+  console.log("[checkinWill] confirming transaction...");
   await connection.confirmTransaction(
     { signature, blockhash, lastValidBlockHeight },
     "confirmed",
   );
+  console.log("[checkinWill] confirmed!");
 
   return signature;
+}
+
+/* ─── Token registry ─────────────────────────────────────────────── */
+export type Token = {
+  symbol: string;
+  name: string;
+  mint: string;
+  decimals: number;
+  logo: string;
+};
+
+export const SOL_LOGO = "/sol-logo.png";
+
+export const TOKENS: Token[] = [
+  {
+    symbol: "SOL",
+    name: "Solana",
+    mint: "So11111111111111111111111111111111111111112",
+    decimals: 9,
+    logo: SOL_LOGO,
+  },
+  {
+    symbol: "USDC",
+    name: "USD Coin",
+    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    decimals: 6,
+    logo: "/usdc-logo.png",
+  },
+  {
+    symbol: "USDT",
+    name: "Tether",
+    mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    decimals: 6,
+    logo: "/USDT_LOGO.png",
+  },
+  {
+    symbol: "BONK",
+    name: "Bonk",
+    mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    decimals: 5,
+    logo: "/bonk-logo.png",
+  },
+];
+
+export const SPL_TOKENS = TOKENS.filter((t) => t.symbol !== "SOL");
+
+export const TOKEN_LOGO_MAP: Record<string, string> = {
+  SOL: SOL_LOGO,
+  USDC: "/usdc-logo.png",
+  USDT: "/USDT_LOGO.png",
+  BONK: "/bonk-logo.png",
+};
+
+export async function getTokenProgramForMint(
+  connection: Connection,
+  mint: PublicKey,
+): Promise<PublicKey> {
+  const accountInfo = await connection.getAccountInfo(mint);
+  if (!accountInfo) throw new Error("Mint not found");
+
+  if (accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    return TOKEN_2022_PROGRAM_ID;
+  }
+  return TOKEN_PROGRAM_ID;
 }

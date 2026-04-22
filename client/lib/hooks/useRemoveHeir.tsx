@@ -51,7 +51,7 @@ export function useRemoveHeir() {
                 }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey

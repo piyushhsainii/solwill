@@ -40,7 +40,9 @@ export default function Navbar() {
         {/* Logo */}
         <Link
           href="/"
+
           style={{
+
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
@@ -49,19 +51,19 @@ export default function Navbar() {
           }}
         >
           <motion.div
-            whileHover={{ scale: 1.08, rotate: -4 }}
+            whileHover={{ scale: 1.5, rotate: -9 }}
             transition={{ type: 'spring', stiffness: 400, damping: 18 }}
             style={{
-              width: 28,
-              height: 28,
+              width: 35,
+              height: 35,
               borderRadius: '6px',
               overflow: 'hidden',
               flexShrink: 0,
             }}
           >
-            <img src="/solwillicon.jpeg" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+            <img src="/solwillicon.jpeg" className='invert' style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
           </motion.div>
-          <span style={{ color: '#ffffff', fontWeight: 600, fontSize: '15px', letterSpacing: '-0.01em' }}>
+          <span className='tracking-tight' style={{ color: '#ffffff', fontWeight: 200, fontSize: '15px', letterSpacing: '-0.01em' }}>
             SolWill
           </span>
         </Link>
@@ -76,6 +78,7 @@ export default function Navbar() {
           {navLinks.map(({ href, label }) => (
             <motion.li
               key={href}
+              className='tracking-tighter'
               variants={{
                 hidden: { opacity: 0, y: -8 },
                 show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },

@@ -64,7 +64,7 @@ export function useAddHeir() {
 
                 const connection = new Connection(RPC_URL, 'confirmed')
 
-                const provider = new AnchorProvider(connection, raw, {
+                const provider = new AnchorProvider(connection, raw as any, {
                     commitment: 'confirmed',
                 })
 

@@ -1,590 +1,651 @@
 'use client'
 
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
-import { Shield, CheckCircle, ExternalLink, Wallet, Trash2, Plus, AlertCircle, X } from 'lucide-react'
-import { mockTx } from '@/lib/utils'
-import toast from 'react-hot-toast'
-import { useWillStore, type Heir } from '@/app/store/useWillStore'
+import { Search, AlertTriangle, Clock, CheckCircle, ShieldOff, Wallet, Copy, Check } from 'lucide-react'
+import { PublicKey } from '@solana/web3.js'
+import { useSollWillWallet } from '@/lib/hooks/useSolWillWallet'
+import { loadWillClaimInfo, useClaimWill, WillClaimInfo } from '@/lib/hooks/useClaimWill'
 
-type ClaimState = 'not-triggered' | 'ready' | 'claimed'
-
-const MAX_HEIRS = 5
-
-// ── Shared inline style helpers ─────────────────────────────────────────────
-const card: React.CSSProperties = {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: '20px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-    padding: '28px 24px',
+/* ─── Helpers ────────────────────────────────────────────────────── */
+function formatCountdown(seconds: number): string {
+    const s = Math.max(0, seconds)
+    const d = Math.floor(s / 86400)
+    const h = Math.floor((s % 86400) / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    if (d > 0) return `${d}d ${h}h ${m}m`
+    if (h > 0) return `${h}h ${m}m ${sec}s`
+    return `${m}m ${sec}s`
 }
 
-const label: React.CSSProperties = {
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.09em',
-    textTransform: 'uppercase',
-    color: 'var(--text-secondary)',
-    marginBottom: '6px',
-    display: 'block',
+function truncate(addr: string, chars = 6) {
+    return `${addr.slice(0, chars)}…${addr.slice(-4)}`
 }
 
-const input: React.CSSProperties = {
-    width: '100%',
-    padding: '11px 14px',
-    border: '1px solid var(--border)',
-    borderRadius: '10px',
-    fontSize: '14px',
-    background: 'var(--bg)',
-    color: 'var(--text-primary)',
-    fontFamily: 'inherit',
-    outline: 'none',
-    boxSizing: 'border-box',
+function bpsToPercent(bps: number): string {
+    return `${(bps / 100).toFixed(2)}%`
 }
 
-const primaryBtn: React.CSSProperties = {
-    width: '100%',
-    padding: '13px 20px',
-    background: 'var(--primary)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'opacity 0.15s',
-}
-
-const ghostBtn: React.CSSProperties = {
-    padding: '7px 14px',
-    background: 'var(--bg)',
-    color: 'var(--text-secondary)',
-    border: '1px solid var(--border)',
-    borderRadius: '8px',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-}
-
-// ── Heir row ─────────────────────────────────────────────────────────────────
-function HeirRow({
-    heir,
-    index,
-    onUpdate,
-    onRemove,
-}: {
-    heir: Heir
-    index: number
-    onUpdate: (id: string, updates: Partial<Omit<Heir, 'id'>>) => void
-    onRemove: (id: string) => void
-}) {
-    const [editing, setEditing] = useState(false)
-    const [addr, setAddr] = useState(heir.walletAddress)
-    const [bps, setBps] = useState(String(heir.shareBps))
-
-    const save = () => {
-        const parsed = parseInt(bps)
-        if (!addr.trim() || isNaN(parsed) || parsed < 1 || parsed > 10000) {
-            toast.error('Invalid values')
-            return
-        }
-        onUpdate(heir.id, { walletAddress: addr.trim(), shareBps: parsed })
-        setEditing(false)
-    }
-
-    const cancel = () => {
-        setAddr(heir.walletAddress)
-        setBps(String(heir.shareBps))
-        setEditing(false)
-    }
-
-    const COLORS = ['var(--accent)', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
-    const color = COLORS[index % COLORS.length]
-    const initials = heir.walletAddress.slice(0, 2).toUpperCase()
-
+/* ─── Copy button ────────────────────────────────────────────────── */
+function CopyButton({ text }: { text: string }) {
+    const [copied, setCopied] = useState(false)
     return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            style={{
-                border: '1px solid var(--border)',
-                borderRadius: '14px',
-                overflow: 'hidden',
-                background: 'var(--surface)',
-            }}
+        <button
+            onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1800) }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#8A8A82', display: 'flex' }}
         >
-            {/* Summary row */}
-            <div style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '14px 16px',
-            }}>
-                <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%',
-                    background: color, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'white', fontSize: '12px', fontWeight: 700,
+            {copied ? <Check size={13} color="#16A34A" /> : <Copy size={13} />}
+        </button>
+    )
+}
+
+/* ─── Status badge ───────────────────────────────────────────────── */
+function StatusBadge({ status }: { status: WillClaimInfo['status'] }) {
+    const map = {
+        active: { label: 'Active', color: '#16A34A', bg: 'rgba(22,163,74,0.08)', icon: <ShieldOff size={12} /> },
+        triggered: { label: 'Triggered — Claimable', color: '#DC2626', bg: 'rgba(220,38,38,0.08)', icon: <AlertTriangle size={12} /> },
+        claimed: { label: 'Already Claimed', color: '#8A8A82', bg: 'rgba(138,138,130,0.08)', icon: <CheckCircle size={12} /> },
+        loading: { label: 'Loading...', color: '#8A8A82', bg: '#F7F7F4', icon: null },
+        not_found: { label: 'Not Found', color: '#D97706', bg: 'rgba(217,119,6,0.08)', icon: <AlertTriangle size={12} /> },
+        error: { label: 'Error', color: '#DC2626', bg: 'rgba(220,38,38,0.08)', icon: <AlertTriangle size={12} /> },
+    }
+    const s = map[status] ?? map.error
+    return (
+        <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 999,
+            background: s.bg, color: s.color,
+            fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em',
+        }}>
+            {s.icon}
+            {s.label}
+        </div>
+    )
+}
+
+/* ─── Info row ───────────────────────────────────────────────────── */
+function InfoRow({ label, value, mono = false, copy }: { label: string; value: string; mono?: boolean; copy?: string }) {
+    return (
+        <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '11px 0',
+            borderBottom: '1px solid #F0F0EB',
+        }}>
+            <span style={{ fontSize: 12, color: '#8A8A82', letterSpacing: '-0.01em' }}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{
+                    fontSize: 13, color: '#1A1A18', letterSpacing: mono ? '0.02em' : '-0.01em',
+                    fontFamily: mono ? 'monospace' : 'inherit',
                 }}>
-                    {initials}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
-                        {heir.walletAddress}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '1px' }}>
-                        {index === 0 ? 'Primary' : 'Secondary'} · {heir.shareBps / 100}% share ({heir.shareBps} bps)
-                    </div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button
-                        onClick={() => setEditing(e => !e)}
-                        style={{ ...ghostBtn, padding: '5px 12px', fontSize: '12px' }}
-                    >
-                        {editing ? 'Cancel' : 'Edit'}
-                    </button>
-                    <button
-                        onClick={() => onRemove(heir.id)}
-                        style={{
-                            ...ghostBtn, padding: '5px 10px',
-                            color: '#EF4444', borderColor: '#FCA5A5',
-                            background: '#FEF2F2',
-                        }}
-                    >
-                        <Trash2 size={13} />
-                    </button>
-                </div>
-            </div>
-
-            {/* Inline edit form */}
-            <AnimatePresence>
-                {editing && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        style={{ overflow: 'hidden', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}
-                    >
-                        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div>
-                                <label style={label}>Wallet Address</label>
-                                <input
-                                    style={input}
-                                    value={addr}
-                                    onChange={e => setAddr(e.target.value)}
-                                    placeholder="Solana wallet address"
-                                    spellCheck={false}
-                                />
-                            </div>
-                            <div>
-                                <label style={label}>Share (BPS) — 100 bps = 1%</label>
-                                <input
-                                    style={input}
-                                    type="number"
-                                    min={1}
-                                    max={10000}
-                                    value={bps}
-                                    onChange={e => setBps(e.target.value)}
-                                    placeholder="e.g. 5000 = 50%"
-                                />
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <button onClick={save} style={{ ...primaryBtn, width: 'auto', flex: 1 }}>Save</button>
-                                <button onClick={cancel} style={{ ...ghostBtn }}>Cancel</button>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </motion.div>
-    )
-}
-
-// ── Add heir form ─────────────────────────────────────────────────────────────
-function AddHeirForm({ onAdd, onClose }: { onAdd: (h: Omit<Heir, 'id'>) => void; onClose: () => void }) {
-    const [addr, setAddr] = useState('')
-    const [bps, setBps] = useState('')
-
-    const submit = () => {
-        const parsed = parseInt(bps)
-        if (!addr.trim()) { toast.error('Wallet address is required'); return }
-        if (isNaN(parsed) || parsed < 1 || parsed > 10000) { toast.error('BPS must be between 1 and 10000'); return }
-        onAdd({ walletAddress: addr.trim(), shareBps: parsed })
-        toast.success('Heir added')
-        onClose()
-    }
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            style={{
-                ...card,
-                padding: '20px',
-                border: '1.5px solid var(--accent)',
-                background: '#FAFAFE',
-            }}
-        >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>New Heir</span>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-secondary)' }}>
-                    <X size={16} />
-                </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                    <label style={label}>Wallet Address</label>
-                    <input
-                        style={input}
-                        value={addr}
-                        onChange={e => setAddr(e.target.value)}
-                        placeholder="Solana wallet address"
-                        spellCheck={false}
-                    />
-                </div>
-                <div>
-                    <label style={label}>Share in BPS (100 bps = 1%)</label>
-                    <input
-                        style={input}
-                        type="number"
-                        min={1}
-                        max={10000}
-                        value={bps}
-                        onChange={e => setBps(e.target.value)}
-                        placeholder="e.g. 5000 for 50%"
-                    />
-                </div>
-                <button onClick={submit} style={primaryBtn}>Add Heir</button>
-            </div>
-        </motion.div>
-    )
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-export default function ClaimPage() {
-    const params = useParams()
-    const token = params.token as string
-    const { willAccount, vaultAccount, heirs, addHeir, updateHeir, removeHeir } = useWillStore()
-
-    const [claimState, setClaimState] = useState<ClaimState>('not-triggered')
-    const [connected, setConnected] = useState(false)
-    const [txHash, setTxHash] = useState('')
-    const [txPending, setTxPending] = useState(false)
-    const [showAddForm, setShowAddForm] = useState(false)
-
-    useEffect(() => {
-        if (willAccount?.status === 'Triggered' || willAccount?.status === 'Settled') {
-            setClaimState('ready')
-        }
-    }, [willAccount])
-
-    const totalBps = heirs.reduce((sum, h) => sum + h.shareBps, 0)
-    const bpsLeft = 10000 - totalBps
-    const atLimit = heirs.length >= MAX_HEIRS
-
-    const handleConnect = async () => {
-        const id = toast.loading('Connecting wallet...')
-        await new Promise(r => setTimeout(r, 1200))
-        toast.dismiss(id)
-        setConnected(true)
-        toast.success('Wallet connected')
-    }
-
-    const handleClaim = async () => {
-        setTxPending(true)
-        await mockTx('Assets claimed successfully!', () => {
-            setTxHash('5xK9mQvP3nB7hR2jL1sZ' + Math.random().toString(36).substring(2, 8))
-            setClaimState('claimed')
-        })
-        setTxPending(false)
-    }
-
-    const heirShare = 60
-    const heirSol = vaultAccount ? (vaultAccount.sol * heirShare / 100).toFixed(2) : '7.86'
-    const heirUsdc = vaultAccount ? Math.floor(vaultAccount.usdc * heirShare / 100) : 300
-
-    return (
-        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 16px' }}>
-
-            {/* Logo */}
-            <motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}
-            >
-                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Wallet size={15} color="white" />
-                </div>
-                <span style={{ fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '14px', color: 'var(--text-primary)' }}>
-                    SOLWILL
+                    {value}
                 </span>
-            </motion.div>
+                {copy && <CopyButton text={copy} />}
+            </div>
+        </div>
+    )
+}
 
-            {/* Demo toggle */}
-            <button
-                onClick={() => setClaimState(s => s === 'not-triggered' ? 'ready' : s === 'ready' ? 'not-triggered' : 'not-triggered')}
-                style={{ ...ghostBtn, marginBottom: '24px', fontSize: '12px' }}
-            >
-                Demo: Toggle State ({claimState})
-            </button>
+/* ═══════════════════════════════════════════════════════════════════
+   Main Page
+   ═══════════════════════════════════════════════════════════════════ */
+export default function ClaimWillPage() {
+    const { publicKey, connected } = useSollWillWallet()
+    const { claimWill, loading: claiming } = useClaimWill()
 
-            <div style={{ width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    const [input, setInput] = useState('')
+    const [loadingInfo, setLoadingInfo] = useState(false)
+    const [info, setInfo] = useState<WillClaimInfo | null>(null)
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [claimSuccess, setClaimSuccess] = useState(false)
+    const [focused, setFocused] = useState(false)
 
-                {/* ── Claim states ── */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={claimState}
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.3 }}
-                    >
+    // Live countdown ticker
+    const [tick, setTick] = useState(0)
+    useEffect(() => {
+        if (!info || info.status !== 'active') return
+        const t = setInterval(() => setTick(v => v + 1), 1000)
+        return () => clearInterval(t)
+    }, [info])
 
-                        {claimState === 'not-triggered' && (
-                            <div style={card}>
-                                <span style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                    padding: '4px 12px', borderRadius: '999px',
-                                    background: '#FFF7ED', color: '#EA580C',
-                                    fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em',
-                                    textTransform: 'uppercase', marginBottom: '16px',
-                                }}>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EA580C', display: 'inline-block' }} />
-                                    Monitoring Active
-                                </span>
-                                <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-                                    Will Not Yet Triggered
-                                </h2>
-                                <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
-                                    The will is active but has not triggered yet. The owner is still checking in regularly.
-                                </p>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 14px', background: 'var(--bg)', borderRadius: '10px', marginBottom: '20px' }}>
-                                    <Shield size={14} color="var(--text-secondary)" />
-                                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                        You'll be notified when assets become claimable.
-                                    </span>
-                                </div>
-                                {!connected ? (
-                                    <button onClick={handleConnect} style={primaryBtn}>
-                                        Connect Wallet to Verify Identity
-                                    </button>
-                                ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0' }}>
-                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
-                                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#16a34a' }}>Wallet connected · Identity verified</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+    // Recompute countdown from stored info
+    const secondsLeft = info
+        ? info.secondsUntilExpiry - tick
+        : 0
 
-                        {claimState === 'ready' && (
-                            <div style={card}>
-                                <span style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                    padding: '4px 12px', borderRadius: '999px',
-                                    background: '#F0FDF4', color: '#16A34A',
-                                    fontSize: '11px', fontWeight: 700, letterSpacing: '0.07em',
-                                    textTransform: 'uppercase', marginBottom: '16px',
-                                }}>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16A34A', display: 'inline-block' }} />
-                                    Ready to Claim
-                                </span>
-                                <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-                                    Claim Inheritance
-                                </h2>
-                                <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
-                                    The will has been triggered. Connect your wallet to claim your share.
-                                </p>
-                                <div style={{ border: '1.5px solid var(--accent)', borderRadius: '14px', padding: '18px', background: '#FAFAFE', marginBottom: '12px' }}>
-                                    <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '8px' }}>Your Share</div>
-                                    <div style={{ fontSize: '40px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{heirShare}%</div>
-                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px', marginTop: '2px' }}>of the estate vault</div>
-                                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {[{ label: 'SOL', value: `${heirSol} SOL` }, { label: 'USDC', value: `${heirUsdc} USDC` }].map(row => (
-                                            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                                                <span style={{ color: 'var(--text-secondary)' }}>{row.label}</span>
-                                                <span style={{ fontWeight: 600 }}>{row.value}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div style={{ background: 'var(--bg)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                                        <CheckCircle size={12} color="var(--success)" />
-                                        <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                                            Verified On-Chain
-                                        </span>
-                                    </div>
-                                    <p style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>
-                                        Will triggered after 90-day inactivity. Your wallet address was registered as an heir at will creation. No admin approval required.
-                                    </p>
-                                </div>
-                                {!connected ? (
-                                    <button onClick={handleConnect} style={primaryBtn}>Connect Wallet to Claim</button>
-                                ) : (
-                                    <button onClick={handleClaim} disabled={txPending} style={{ ...primaryBtn, opacity: txPending ? 0.7 : 1 }}>
-                                        {txPending ? (
-                                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '2px solid white', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                                                Processing...
-                                            </span>
-                                        ) : 'Claim assets to my wallet'}
-                                    </button>
-                                )}
-                                <p style={{ fontSize: '12px', textAlign: 'center', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                                    Single transaction · Irreversible · On-chain proof
-                                </p>
-                            </div>
-                        )}
+    const handleLoad = useCallback(async () => {
+        if (!input.trim()) return
+        setLoadingInfo(true)
+        setLoadError(null)
+        setInfo(null)
+        setClaimSuccess(false)
+        setTick(0)
 
-                        {claimState === 'claimed' && (
-                            <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
-                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
-                                    <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <CheckCircle size={32} color="var(--success)" />
-                                    </div>
-                                </motion.div>
-                                <div>
-                                    <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>Assets Successfully Claimed</h2>
-                                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                                        Your inheritance has been transferred to your wallet. Permanently recorded on-chain.
-                                    </p>
-                                </div>
-                                {txHash && (
-                                    <a href={`https://solscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
-                                        View on Solscan <ExternalLink size={13} />
-                                    </a>
-                                )}
-                                <div style={{ background: 'var(--bg)', borderRadius: '12px', padding: '14px', width: '100%', textAlign: 'left' }}>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Transaction Hash</div>
-                                    <div style={{ fontSize: '12px', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
-                                        {txHash}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </motion.div>
-                </AnimatePresence>
+        try {
+            const result = await loadWillClaimInfo(
+                input.trim(),
+                publicKey?.toBase58() ?? null
+            )
+            setInfo(result)
+        } catch (err: any) {
+            setLoadError(err.message || 'Failed to load will')
+        } finally {
+            setLoadingInfo(false)
+        }
+    }, [input, publicKey])
 
-                {/* ── Heirs Management ── */}
-                <div style={{ ...card }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <div>
-                            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                                Designated Heirs
-                            </h3>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '3px 0 0' }}>
-                                {heirs.length} of {MAX_HEIRS} slots used
-                            </p>
+    const handleClaim = useCallback(async () => {
+        if (!info) return
+        const success = await claimWill(info.ownerPk)
+        if (success) {
+            setClaimSuccess(true)
+            // Reload to reflect claimed state
+            setTimeout(() => handleLoad(), 2000)
+        }
+    }, [info, claimWill, handleLoad])
+
+    const isTriggered = info?.status === 'triggered'
+    const isClaimed = info?.status === 'claimed'
+    const isActive = info?.status === 'active'
+    const isHeir = info?.heirBps != null
+    const canClaim = isTriggered && isHeir && !isClaimed && connected
+
+    const stagger = {
+        hidden: {},
+        show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+    }
+    const fadeUp = {
+        hidden: { opacity: 0, y: 12 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } },
+    }
+
+    return (
+        <>
+            <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes shimmer {
+                    0% { background-position: -200% center; }
+                    100% { background-position: 200% center; }
+                }
+            `}</style>
+
+            <div style={{
+                maxWidth: 560,
+                margin: '0 auto',
+                padding: '32px 20px 48px',
+                boxSizing: 'border-box',
+                minHeight: '100vh',
+            }}>
+                <motion.div
+                    variants={stagger}
+                    initial="hidden"
+                    animate="show"
+                    style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+                >
+
+                    {/* ── Header ── */}
+                    <motion.div variants={fadeUp}>
+                        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#8A8A82', marginBottom: 8 }}>
+                            Estate Recovery
                         </div>
-                        {!atLimit && (
-                            <button
-                                onClick={() => setShowAddForm(s => !s)}
+                        <h1 style={{
+                            fontSize: 26, fontWeight: 300,
+                            color: '#1A1A18', margin: '0 0 6px',
+                            letterSpacing: '-0.04em',
+                        }}>
+                            Claim Inheritance
+                        </h1>
+                        <p style={{ fontSize: 13, color: '#8A8A82', margin: 0, letterSpacing: '-0.01em', lineHeight: 1.6 }}>
+                            Enter the will owner's wallet address to check status and claim your designated share.
+                        </p>
+                    </motion.div>
+
+                    {/* ── Search input ── */}
+                    <motion.div variants={fadeUp}>
+                        <div style={{
+                            background: '#fff',
+                            border: '1px solid #E4E4DF',
+                            borderRadius: 20,
+                            padding: '18px 20px',
+                            boxShadow: '0 2px 12px rgba(36,43,53,0.05)',
+                        }}>
+                            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#8A8A82', marginBottom: 12 }}>
+                                Owner Wallet Address
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <motion.div
+                                    animate={{
+                                        borderColor: focused ? '#242B35' : '#E4E4DF',
+                                        boxShadow: focused ? '0 0 0 3px rgba(36,43,53,0.06)' : '0 0 0 0px transparent',
+                                    }}
+                                    transition={{ duration: 0.18 }}
+                                    style={{
+                                        flex: 1,
+                                        borderRadius: 12,
+                                        border: '1px solid #E4E4DF',
+                                        background: '#FAFAF8',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '0 12px',
+                                        gap: 8,
+                                    }}
+                                >
+                                    <Search size={15} color="#8A8A82" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                                    <input
+                                        value={input}
+                                        onChange={e => setInput(e.target.value)}
+                                        onFocus={() => setFocused(true)}
+                                        onBlur={() => setFocused(false)}
+                                        onKeyDown={e => e.key === 'Enter' && handleLoad()}
+                                        placeholder="e.g. 5NHvrqoZk4ov5Gv…"
+                                        style={{
+                                            flex: 1, border: 'none', background: 'transparent',
+                                            color: '#1A1A18', fontSize: 13, outline: 'none',
+                                            fontFamily: 'monospace', padding: '12px 0',
+                                            letterSpacing: '0.01em',
+                                        }}
+                                    />
+                                    {input && (
+                                        <button
+                                            onClick={() => { setInput(''); setInfo(null); setLoadError(null) }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8A82', padding: 2 }}
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </motion.div>
+
+                                <motion.button
+                                    whileHover={input ? { scale: 1.03 } : {}}
+                                    whileTap={input ? { scale: 0.97 } : {}}
+                                    onClick={handleLoad}
+                                    disabled={!input.trim() || loadingInfo}
+                                    style={{
+                                        padding: '0 18px',
+                                        borderRadius: 12,
+                                        border: 'none',
+                                        background: input.trim() ? '#242B35' : '#E4E4DF',
+                                        color: input.trim() ? '#fff' : '#8A8A82',
+                                        fontSize: 13, fontWeight: 300,
+                                        cursor: input.trim() ? 'pointer' : 'not-allowed',
+                                        fontFamily: 'inherit',
+                                        display: 'flex', alignItems: 'center', gap: 6,
+                                        transition: 'background 0.2s',
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    {loadingInfo ? (
+                                        <div style={{
+                                            width: 16, height: 16, borderRadius: '50%',
+                                            border: '2px solid rgba(255,255,255,0.3)',
+                                            borderTopColor: '#fff',
+                                            animation: 'spin 0.6s linear infinite',
+                                        }} />
+                                    ) : 'Look up'}
+                                </motion.button>
+                            </div>
+
+                            {!connected && (
+                                <div style={{
+                                    marginTop: 12, padding: '10px 12px',
+                                    borderRadius: 10, background: 'rgba(217,119,6,0.07)',
+                                    border: '1px solid rgba(217,119,6,0.2)',
+                                    fontSize: 12, color: '#D97706',
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                }}>
+                                    <Wallet size={13} />
+                                    Connect your wallet to check if you're a registered heir.
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+
+                    {/* ── Load error ── */}
+                    <AnimatePresence>
+                        {loadError && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
                                 style={{
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    padding: '8px 14px', borderRadius: '10px',
-                                    background: showAddForm ? 'var(--bg)' : 'var(--primary)',
-                                    color: showAddForm ? 'var(--text-secondary)' : 'white',
-                                    border: showAddForm ? '1px solid var(--border)' : 'none',
-                                    fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                                    padding: '14px 16px', borderRadius: 14,
+                                    background: 'rgba(220,38,38,0.06)',
+                                    border: '1px solid rgba(220,38,38,0.2)',
+                                    display: 'flex', alignItems: 'center', gap: 8,
                                 }}
                             >
-                                <Plus size={14} />
-                                Add Heir
-                            </button>
-                        )}
-                    </div>
-
-                    {/* BPS meter */}
-                    {heirs.length > 0 && (
-                        <div style={{ marginBottom: '16px', marginTop: '12px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Total allocation</span>
-                                <span style={{
-                                    fontSize: '11px', fontWeight: 700,
-                                    color: totalBps > 10000 ? '#EF4444' : totalBps === 10000 ? '#16a34a' : 'var(--text-secondary)',
-                                }}>
-                                    {totalBps} / 10000 bps {bpsLeft > 0 ? `(${bpsLeft} remaining)` : totalBps === 10000 ? '✓ Fully allocated' : '⚠ Over-allocated'}
+                                <AlertTriangle size={15} color="#DC2626" />
+                                <span style={{ fontSize: 13, color: '#DC2626', letterSpacing: '-0.01em' }}>
+                                    {loadError}
                                 </span>
-                            </div>
-                            <div style={{ height: '4px', borderRadius: '999px', background: 'var(--bg)', overflow: 'hidden' }}>
-                                <div style={{
-                                    height: '100%', borderRadius: '999px',
-                                    background: totalBps > 10000 ? '#EF4444' : totalBps === 10000 ? '#16a34a' : 'var(--accent)',
-                                    width: `${Math.min((totalBps / 10000) * 100, 100)}%`,
-                                    transition: 'width 0.4s ease',
-                                }} />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Over-alloc warning */}
-                    {totalBps > 10000 && (
-                        <div style={{ display: 'flex', gap: '8px', padding: '10px 12px', background: '#FEF2F2', borderRadius: '10px', marginBottom: '12px' }}>
-                            <AlertCircle size={14} color="#EF4444" style={{ flexShrink: 0, marginTop: '1px' }} />
-                            <span style={{ fontSize: '12px', color: '#B91C1C', lineHeight: 1.5 }}>
-                                Total BPS exceeds 10000. Please adjust heir shares so they sum to ≤ 10000.
-                            </span>
-                        </div>
-                    )}
-
-                    {/* Add form */}
-                    <AnimatePresence>
-                        {showAddForm && (
-                            <div style={{ marginBottom: '12px' }}>
-                                <AddHeirForm
-                                    onAdd={(h) => { addHeir(h); setShowAddForm(false) }}
-                                    onClose={() => setShowAddForm(false)}
-                                />
-                            </div>
+                            </motion.div>
                         )}
                     </AnimatePresence>
 
-                    {/* Heir list */}
-                    {heirs.length === 0 && !showAddForm ? (
-                        <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                            <div style={{ fontSize: '28px', marginBottom: '8px' }}>👤</div>
-                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>No heirs added yet</p>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>Add up to {MAX_HEIRS} heirs to receive your estate</p>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <AnimatePresence>
-                                {heirs.map((heir, i) => (
-                                    <HeirRow
-                                        key={heir.id}
-                                        heir={heir}
-                                        index={i}
-                                        onUpdate={updateHeir}
-                                        onRemove={removeHeir}
-                                    />
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    )}
+                    {/* ── Will info card ── */}
+                    <AnimatePresence>
+                        {info && (
+                            <motion.div
+                                key="info"
+                                initial={{ opacity: 0, y: 16 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 8 }}
+                                transition={{ duration: 0.38, ease: [0.23, 1, 0.32, 1] }}
+                                style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+                            >
+                                {/* Status card */}
+                                <div style={{
+                                    background: '#fff',
+                                    border: '1px solid #E4E4DF',
+                                    borderRadius: 20,
+                                    padding: '20px',
+                                    boxShadow: '0 2px 12px rgba(36,43,53,0.05)',
+                                }}>
+                                    <div style={{
+                                        display: 'flex', justifyContent: 'space-between',
+                                        alignItems: 'flex-start', marginBottom: 16,
+                                    }}>
+                                        <div>
+                                            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#8A8A82', marginBottom: 6 }}>
+                                                Will Status
+                                            </div>
+                                            <StatusBadge status={info.status} />
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#8A8A82', marginBottom: 4 }}>
+                                                Vault Balance
+                                            </div>
+                                            <div style={{ fontSize: 18, fontWeight: 300, color: '#1A1A18', letterSpacing: '-0.03em' }}>
+                                                {info.vaultSolBalance.toFixed(4)} SOL
+                                            </div>
+                                        </div>
+                                    </div>
 
-                    {/* At limit notice */}
-                    {atLimit && (
-                        <div style={{ display: 'flex', gap: '8px', padding: '10px 12px', background: 'var(--bg)', borderRadius: '10px', marginTop: '12px' }}>
-                            <AlertCircle size={14} color="var(--text-secondary)" style={{ flexShrink: 0, marginTop: '1px' }} />
-                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                Maximum of {MAX_HEIRS} heirs reached. Remove an heir to add a new one.
-                            </span>
-                        </div>
-                    )}
-                </div>
+                                    {/* Details */}
+                                    <div>
+                                        <InfoRow label="Owner" value={truncate(info.ownerPk)} mono copy={info.ownerPk} />
+                                        <InfoRow label="Will PDA" value={truncate(info.willPda)} mono copy={info.willPda} />
+                                        <InfoRow label="Registered Heirs" value={String(info.heirCount)} />
+                                        <InfoRow
+                                            label="Total Allocated"
+                                            value={`${(info.totalBps / 100).toFixed(0)}%`}
+                                        />
+                                    </div>
+                                </div>
 
+                                {/* Countdown — only when active */}
+                                {isActive && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.97 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        style={{
+                                            background: '#fff',
+                                            border: '1px solid #E4E4DF',
+                                            borderRadius: 20,
+                                            padding: '20px',
+                                            boxShadow: '0 2px 12px rgba(36,43,53,0.05)',
+                                        }}
+                                    >
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
+                                        }}>
+                                            <div style={{
+                                                width: 32, height: 32, borderRadius: 10,
+                                                background: 'rgba(22,163,74,0.07)',
+                                                border: '1px solid rgba(22,163,74,0.2)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                <Clock size={15} color="#16A34A" strokeWidth={1.8} />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 13, color: '#1A1A18', letterSpacing: '-0.02em' }}>
+                                                    Will is still active
+                                                </div>
+                                                <div style={{ fontSize: 11, color: '#8A8A82' }}>
+                                                    Cannot be claimed until the owner misses their check-in
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Countdown bar */}
+                                        <div style={{
+                                            padding: '14px 16px',
+                                            borderRadius: 14,
+                                            background: 'rgba(22,163,74,0.05)',
+                                            border: '1px solid rgba(22,163,74,0.15)',
+                                        }}>
+                                            <div style={{
+                                                display: 'flex', justifyContent: 'space-between',
+                                                alignItems: 'center', marginBottom: 8,
+                                            }}>
+                                                <span style={{ fontSize: 11, color: '#8A8A82' }}>
+                                                    Time until trigger window
+                                                </span>
+                                                <span style={{ fontSize: 14, color: '#1A1A18', fontWeight: 300, letterSpacing: '-0.02em' }}>
+                                                    {secondsLeft > 0 ? formatCountdown(secondsLeft) : 'Expired'}
+                                                </span>
+                                            </div>
+                                            <div style={{
+                                                height: 5, borderRadius: 999,
+                                                background: '#E4E4DF', overflow: 'hidden',
+                                            }}>
+                                                <motion.div
+                                                    animate={{ width: `${Math.min(100, Math.max(0, (secondsLeft / info.interval) * 100))}%` }}
+                                                    transition={{ duration: 0.5 }}
+                                                    style={{
+                                                        height: '100%', borderRadius: 999,
+                                                        background: 'linear-gradient(90deg, #16A34A88, #16A34A)',
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Already claimed state */}
+                                {isClaimed && (
+                                    <motion.div
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        style={{
+                                            background: 'rgba(138,138,130,0.05)',
+                                            border: '1px solid #E4E4DF',
+                                            borderRadius: 20,
+                                            padding: '20px',
+                                            display: 'flex', alignItems: 'center', gap: 12,
+                                        }}
+                                    >
+                                        <CheckCircle size={20} color="#8A8A82" strokeWidth={1.5} />
+                                        <div>
+                                            <div style={{ fontSize: 14, color: '#555550', letterSpacing: '-0.02em' }}>
+                                                This will has already been claimed
+                                            </div>
+                                            <div style={{ fontSize: 12, color: '#8A8A82', marginTop: 2 }}>
+                                                All inheritance has been distributed to the registered heirs.
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Heir info card */}
+                                {connected && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        style={{
+                                            background: '#fff',
+                                            border: isHeir
+                                                ? '1px solid rgba(22,163,74,0.3)'
+                                                : '1px solid rgba(220,38,38,0.2)',
+                                            borderRadius: 20,
+                                            padding: '20px',
+                                            boxShadow: '0 2px 12px rgba(36,43,53,0.05)',
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: isHeir ? 14 : 0 }}>
+                                            <div style={{
+                                                width: 32, height: 32, borderRadius: 10,
+                                                background: isHeir ? 'rgba(22,163,74,0.07)' : 'rgba(220,38,38,0.07)',
+                                                border: isHeir ? '1px solid rgba(22,163,74,0.2)' : '1px solid rgba(220,38,38,0.2)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                <Wallet size={15} color={isHeir ? '#16A34A' : '#DC2626'} strokeWidth={1.8} />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 13, color: '#1A1A18', letterSpacing: '-0.02em' }}>
+                                                    {isHeir ? 'You are a registered heir' : 'You are not a registered heir'}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: '#8A8A82' }}>
+                                                    {publicKey ? truncate(publicKey.toBase58(), 8) : ''}
+                                                </div>
+                                            </div>
+                                            {isHeir && (
+                                                <div style={{
+                                                    marginLeft: 'auto',
+                                                    padding: '4px 12px', borderRadius: 999,
+                                                    background: 'rgba(22,163,74,0.08)',
+                                                    fontSize: 14, fontWeight: 300,
+                                                    color: '#16A34A', letterSpacing: '-0.01em',
+                                                }}>
+                                                    {bpsToPercent(info.heirBps!)}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {isHeir && (
+                                            <div style={{
+                                                padding: '12px 14px',
+                                                borderRadius: 12,
+                                                background: 'rgba(22,163,74,0.05)',
+                                                border: '1px solid rgba(22,163,74,0.12)',
+                                            }}>
+                                                <div style={{
+                                                    display: 'flex', justifyContent: 'space-between', marginBottom: 6,
+                                                }}>
+                                                    <span style={{ fontSize: 11, color: '#8A8A82' }}>Your share</span>
+                                                    <span style={{ fontSize: 11, color: '#8A8A82' }}>Estimated SOL</span>
+                                                </div>
+                                                <div style={{
+                                                    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                                                }}>
+                                                    <span style={{ fontSize: 22, color: '#16A34A', fontWeight: 300, letterSpacing: '-0.04em' }}>
+                                                        {bpsToPercent(info.heirBps!)}
+                                                    </span>
+                                                    <span style={{ fontSize: 16, color: '#1A1A18', fontWeight: 300, letterSpacing: '-0.03em' }}>
+                                                        ≈ {((info.heirBps! / 10000) * info.vaultSolBalance).toFixed(4)} SOL
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {!isHeir && (
+                                            <div style={{
+                                                marginTop: 12, padding: '10px 12px',
+                                                borderRadius: 10,
+                                                background: 'rgba(220,38,38,0.05)',
+                                                fontSize: 12, color: '#DC2626', letterSpacing: '-0.01em',
+                                            }}>
+                                                Your connected wallet is not listed as an heir for this will. Connect the correct wallet to claim.
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                )}
+
+                                {/* Claim button — only when triggered + heir */}
+                                {isTriggered && connected && (
+                                    <AnimatePresence>
+                                        {claimSuccess ? (
+                                            <motion.div
+                                                key="success"
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                style={{
+                                                    padding: '16px 20px',
+                                                    borderRadius: 16,
+                                                    background: 'rgba(22,163,74,0.08)',
+                                                    border: '1px solid rgba(22,163,74,0.25)',
+                                                    display: 'flex', alignItems: 'center', gap: 10,
+                                                }}
+                                            >
+                                                <CheckCircle size={20} color="#16A34A" />
+                                                <div>
+                                                    <div style={{ fontSize: 14, color: '#16A34A', letterSpacing: '-0.02em' }}>
+                                                        Claim submitted successfully
+                                                    </div>
+                                                    <div style={{ fontSize: 12, color: '#8A8A82', marginTop: 2 }}>
+                                                        Your inheritance is being transferred on-chain.
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        ) : (
+                                            <motion.div key="btn">
+                                                {!isHeir && (
+                                                    <div style={{
+                                                        marginBottom: 10, padding: '10px 14px',
+                                                        borderRadius: 12,
+                                                        background: 'rgba(220,38,38,0.06)',
+                                                        border: '1px solid rgba(220,38,38,0.18)',
+                                                        display: 'flex', alignItems: 'center', gap: 8,
+                                                        fontSize: 12, color: '#DC2626',
+                                                    }}>
+                                                        <AlertTriangle size={13} />
+                                                        Only registered heirs can claim from this will.
+                                                    </div>
+                                                )}
+
+                                                <motion.button
+                                                    whileHover={canClaim ? { y: -1, boxShadow: '0 10px 28px rgba(36,43,53,0.18)' } : {}}
+                                                    whileTap={canClaim ? { scale: 0.985 } : {}}
+                                                    onClick={handleClaim}
+                                                    disabled={!canClaim || claiming}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '14px',
+                                                        borderRadius: 16,
+                                                        border: 'none',
+                                                        background: canClaim ? '#242B35' : '#E4E4DF',
+                                                        color: canClaim ? '#fff' : '#8A8A82',
+                                                        fontSize: 14, fontWeight: 300,
+                                                        letterSpacing: '-0.025em',
+                                                        cursor: canClaim ? 'pointer' : 'not-allowed',
+                                                        display: 'flex', alignItems: 'center',
+                                                        justifyContent: 'center', gap: 8,
+                                                        fontFamily: 'inherit',
+                                                        transition: 'background 0.2s',
+                                                    }}
+                                                >
+                                                    {claiming ? (
+                                                        <>
+                                                            <div style={{
+                                                                width: 16, height: 16, borderRadius: '50%',
+                                                                border: '2px solid rgba(255,255,255,0.3)',
+                                                                borderTopColor: '#fff',
+                                                                animation: 'spin 0.6s linear infinite',
+                                                            }} />
+                                                            Claiming on-chain…
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Wallet size={15} strokeWidth={1.8} />
+                                                            {canClaim
+                                                                ? `Claim ${bpsToPercent(info.heirBps!)} — ≈ ${((info.heirBps! / 10000) * info.vaultSolBalance).toFixed(4)} SOL`
+                                                                : 'Claim Inheritance'
+                                                            }
+                                                        </>
+                                                    )}
+                                                </motion.button>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                )}
+
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                </motion.div>
             </div>
-
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
+        </>
     )
 }

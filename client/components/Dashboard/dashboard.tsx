@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import AssetsComponent from './assetscard'
 import ProtectionStatusCard from '../ui/protectionStatusCard'
@@ -26,21 +26,19 @@ const Dashboard = ({
     activeHeirs: Heir[]
 }) => {
 
-    const {
-        setTxPending,
-        txPending,
-        performCheckin,
-    } = useWillStore()
+    const setTxPending = useWillStore((s) => s.setTxPending)
+    const txPending = useWillStore((s) => s.txPending)
+    const performCheckin = useWillStore((s) => s.performCheckin)
 
     const [checkinAnim, setCheckinAnim] = useState(false)
 
-    const handleCheckin = async () => {
+    const handleCheckin = useCallback(async () => {
         setCheckinAnim(true)
         setTxPending(true)
         await mockTx('Check-in recorded on-chain', performCheckin)
         setTxPending(false)
         setTimeout(() => setCheckinAnim(false), 600)
-    }
+    }, [setTxPending, performCheckin])
 
     // ── Dashboard helpers ───────────────────────────────────────────────
     const daysLeft = activeWill ? daysUntilExpiry(activeWill.lastCheckin, activeWill.interval) : 0
@@ -48,8 +46,11 @@ const Dashboard = ({
     const progressPct = intervalDays > 0 ? (daysLeft / intervalDays) * 100 : 0
     const isUrgent = daysLeft < 7
     const hasAssets = !!(vaultAccount && (vaultAccount.totalUsdValue > 0 || vaultAccount.sol > 0))
-    const avatarColors = ['var(--accent)', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
 
+    const avatarColors = useMemo(
+        () => ['var(--accent)', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
+        []
+    )
     return (
         <motion.div
             key="dashboard"
@@ -88,7 +89,6 @@ const Dashboard = ({
                         <ProtectionStatusCard
                             txPending={txPending}
                             checkinAnim={checkinAnim}
-                            onCheckin={handleCheckin}
                             nextVerificationTimestamp={formatTimestamp(activeWill.lastCheckin + activeWill.interval)}
                         />
                     </motion.div>

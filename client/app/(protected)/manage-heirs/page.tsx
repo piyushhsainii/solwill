@@ -2,306 +2,419 @@
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, Users } from 'lucide-react'
+import { Plus, Trash2, Users, Check, X } from 'lucide-react'
 import { useWillStore } from '@/app/store/useWillStore'
 import type { Heir } from '@/app/store/useWillStore'
 import { useUpdateHeir } from '@/lib/hooks/useUpdateHeir'
 import { useRemoveHeir } from '@/lib/hooks/useRemoveHeir'
+import { useAddHeir } from '@/lib/hooks/useAddHeir'
+import DesignatedHeirs from '@/components/Dashboard/designated_heirs'
 
+// ── Confirm dialog ────────────────────────────────────────────────────────────
+type DialogState =
+    | { type: 'update'; heir: Heir; newAddress: string; newBps: number }
+    | { type: 'remove'; heir: Heir }
+    | null
+
+function ConfirmDialog({
+    dialog,
+    onConfirm,
+    onCancel,
+    loading,
+}: {
+    dialog: DialogState
+    onConfirm: () => void
+    onCancel: () => void
+    loading: boolean
+}) {
+    if (!dialog) return null
+
+    const isUpdate = dialog.type === 'update'
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+                position: 'fixed', inset: 0, zIndex: 50,
+                background: 'rgba(26,26,24,0.45)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 24,
+            }}
+            onClick={onCancel}
+        >
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 12 }}
+                transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    background: '#fff',
+                    border: '1px solid #E4E4DF',
+                    borderRadius: 24,
+                    padding: '28px 28px 24px',
+                    maxWidth: 400,
+                    width: '100%',
+                    boxShadow: '0 8px 40px rgba(36,43,53,0.14)',
+                }}
+            >
+                {/* Icon */}
+                <div style={{
+                    width: 48, height: 48, borderRadius: '50%',
+                    background: isUpdate ? '#F7F7F4' : 'rgba(220,38,38,0.07)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 16,
+                }}>
+                    {isUpdate
+                        ? <Check size={20} color="#242B35" />
+                        : <Trash2 size={20} color="#dc2626" />}
+                </div>
+
+                <div style={{ fontSize: 18, color: '#1A1A18', fontWeight: 300, marginBottom: 8, letterSpacing: '-0.02em' }}>
+                    {isUpdate ? 'Confirm update' : 'Remove heir?'}
+                </div>
+
+                <div style={{ fontSize: 13, color: '#555550', fontWeight: 300, lineHeight: 1.65, marginBottom: 24 }}>
+                    {isUpdate ? (
+                        <>
+                            You&apos;re about to update heir{' '}
+                            <span style={{ fontFamily: 'monospace', color: '#1A1A18' }}>
+                                {truncateAddr(dialog.heir.walletAddress)}
+                            </span>{' '}
+                            → new address{' '}
+                            <span style={{ fontFamily: 'monospace', color: '#1A1A18' }}>
+                                {truncateAddr(dialog.newAddress)}
+                            </span>{' '}
+                            with <strong>{dialog.newBps} bps</strong>. This will require a wallet signature.
+                        </>
+                    ) : (
+                        <>
+                            You&apos;re about to permanently remove heir{' '}
+                            <span style={{ fontFamily: 'monospace', color: '#1A1A18' }}>
+                                {truncateAddr(dialog.heir.walletAddress)}
+                            </span>{' '}
+                            ({dialog.heir.shareBps} bps). This action requires a wallet signature and cannot be undone.
+                        </>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                        onClick={onCancel}
+                        disabled={loading}
+                        style={{
+                            flex: 1, padding: '11px 0', borderRadius: 14,
+                            border: '1px solid #E4E4DF', background: '#F7F7F4',
+                            color: '#555550', fontSize: 14, fontWeight: 300,
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={loading}
+                        style={{
+                            flex: 1, padding: '11px 0', borderRadius: 14,
+                            border: 'none',
+                            background: isUpdate ? '#242B35' : '#dc2626',
+                            color: '#fff', fontSize: 14, fontWeight: 300,
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            opacity: loading ? 0.6 : 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        }}
+                    >
+                        {loading
+                            ? <span style={{ fontSize: 13 }}>Processing…</span>
+                            : isUpdate ? 'Update heir' : 'Remove heir'}
+                    </button>
+                </div>
+            </motion.div>
+        </motion.div>
+    )
+}
+
+// ── Util (module-level so ConfirmDialog can use it too) ──────────────────────
+function truncateAddr(v: string | undefined) {
+    if (!v) return '—'
+    return v.length > 10 ? `${v.slice(0, 4)}...${v.slice(-4)}` : v
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 export default function ManageHeirsPage() {
-    // ── Individual selectors — prevents setState-during-render ───────────────
     const heirs = useWillStore((s) => s.heirs)
-    const addHeir = useWillStore((s) => s.addHeir)
 
     const { executeUpdateHeir, loading: updateLoading } = useUpdateHeir()
     const { executeRemoveHeir, loading: removeLoading, removingId } = useRemoveHeir()
+    const { addHeir, loading: addLoading } = useAddHeir()
 
+    // ── Add draft ──────────────────────────────────────────────────────────────
     const [draftAddress, setDraftAddress] = useState('')
     const [draftBps, setDraftBps] = useState('')
-    const [error, setError] = useState('')
+    const [addError, setAddError] = useState('')
+
+    // ── Per-heir local edit drafts ─────────────────────────────────────────────
+    // Keyed by heir.id. Populated on first edit, cleared after tx success.
+    const [edits, setEdits] = useState<Record<string, { walletAddress: string; shareBps: string }>>({})
+
+    // ── Confirm dialog state ───────────────────────────────────────────────────
+    const [dialog, setDialog] = useState<DialogState>(null)
+    const [dialogLoading, setDialogLoading] = useState(false)
 
     const totalBps = useMemo(
         () => heirs.reduce((sum, h) => sum + (Number(h.shareBps) || 0), 0),
         [heirs],
     )
 
-    // 1) Add state:
-    const [edits, setEdits] = useState<Record<string, { walletAddress: string; shareBps: string }>>({})
+    // Get the working draft for a given heir (falls back to store values)
+    const getDraft = (heir: Heir) =>
+        edits[heir.id] ?? {
+            walletAddress: heir.walletAddress ?? '',
+            shareBps: String(heir.shareBps ?? 0),
+        }
 
-    // 2) Helpers:
-    const getDraft = (heir: Heir) => edits[heir.id] ?? {
-        walletAddress: heir.walletAddress ?? '',
-        shareBps: String(heir.shareBps ?? ''),
-    }
-
-    const updateDraft = (heir: Heir, field: 'walletAddress' | 'shareBps', value: string) => {
+    const setDraftField = (
+        id: string,
+        field: 'walletAddress' | 'shareBps',
+        value: string,
+        heir: Heir,
+    ) => {
         const current = getDraft(heir)
-        setEdits(prev => ({
-            ...prev,
-            [heir.id]: { ...current, [field]: value }
-        }))
+        setEdits((prev) => ({ ...prev, [id]: { ...current, [field]: value } }))
     }
 
-
-    // ── Add ──────────────────────────────────────────────────────────────────
-    const handleAdd = () => {
-        const address = draftAddress.trim()
-        const bps = Number(draftBps)
-
-        if (!address) return setError('Enter a wallet address.')
-        if (!bps || bps <= 0) return setError('Enter a valid bps value.')
-        if (totalBps + bps > 100) return setError('Total bps cannot exceed 100.')
-        if (heirs.length >= 5) return setError('Maximum 5 heirs allowed.')
-
-        addHeir({ walletAddress: address, shareBps: bps, onChain: false })
-        setDraftAddress('')
-        setDraftBps('')
-        setError('')
-    }
-
-    const handleAddressChange = (id: string, walletAddress: string) => {
-        const heir = heirs.find((h) => h.id === id)
-        if (!heir) return
-
-        executeUpdateHeir(
-            id,                         // storeId
-            heir.walletAddress,         // currentWalletAddress
-            walletAddress,              // newWalletAddress
-            Number(heir.shareBps) || 0  // updatedBps
-        )
-    }
-
-    // ── Update bps inline ───────────────────────────────────
-    const handleBpsChange = (id: string, value: string) => {
-        const heir = heirs.find((h) => h.id === id)
-        if (!heir) return
-
-        const newBps = Number(value) || 0
+    // ── Validate BPS for a given heir edit ─────────────────────────────────────
+    const validateBps = (heirId: string, newBps: number): string | null => {
+        if (newBps <= 0) return 'BPS must be greater than 0.'
+        if (newBps > 100) return 'BPS cannot exceed 100.'
 
         const otherSum = heirs
-            .filter((h) => h.id !== id)
+            .filter((h) => h.id !== heirId)
             .reduce((sum, h) => sum + (Number(h.shareBps) || 0), 0)
 
-        if (otherSum + newBps > 100) {
-            setError('Total bps cannot exceed 100.')
+        if (otherSum + newBps > 100)
+            return `Total BPS would be ${otherSum + newBps} — cannot exceed 100.`
+
+        return null
+    }
+
+    // ── Add ────────────────────────────────────────────────────────────────────
+    const handleAdd = async () => {
+        const address = draftAddress.trim()
+        const bps = Number(draftBps) * 100
+        console.log(bps)
+        if (!address) return setAddError('Enter a wallet address.')
+        if (!bps || bps <= 0) return setAddError('Enter a valid BPS value.')
+        if (heirs.length >= 5) return setAddError('Maximum 5 heirs allowed.')
+
+        const bpsErr = validateBps('__new__', bps)
+        if (bpsErr) return setAddError(bpsErr)
+
+        const ok = await addHeir(address, bps)
+        if (ok) {
+            setDraftAddress('')
+            setDraftBps('')
+            setAddError('')
+        }
+    }
+
+    // ── Request update — open dialog ───────────────────────────────────────────
+    const requestUpdate = (heir: Heir) => {
+        const draft = getDraft(heir)
+        const newBps = Number(draft.shareBps) || 0
+        const newAddr = draft.walletAddress.trim()
+
+        // Nothing changed — no-op
+        if (newAddr === (heir.walletAddress ?? '') && newBps === (heir.shareBps ?? 0)) return
+
+        const bpsErr = validateBps(heir.id, newBps)
+        if (bpsErr) {
+            setAddError(bpsErr)
             return
         }
 
-        setError('')
-
-        executeUpdateHeir(
-            id,                         // storeId
-            heir.walletAddress,         // currentWalletAddress
-            heir.walletAddress,         // keep same wallet
-            newBps                      // updatedBps
-        )
+        setAddError('')
+        setDialog({ type: 'update', heir, newAddress: newAddr, newBps })
     }
 
-    // ── Remove ──────────────────────────────────────────────
-    const handleRemove = (id: string) => {
-        const heir = heirs.find((h) => h.id === id)
-        if (!heir) return
-
-        executeRemoveHeir(
-            id,                         // storeId
-            heir.walletAddress,         // heirWalletAddress
-            heir.walletAddress,         // newHeirAddress (same if required by IDL)
-            Number(heir.shareBps) || 0  // bps
-        )
+    // ── Request remove — open dialog ───────────────────────────────────────────
+    const requestRemove = (heir: Heir) => {
+        setDialog({ type: 'remove', heir })
     }
 
-    const truncate = (v: string | undefined) => {
-        if (!v) return '—'
-        return v.length > 10 ? `${v.slice(0, 4)}...${v.slice(-4)}` : v
+    // ── Confirm dialog action ─────────────────────────────────────────────────
+    const handleConfirm = async () => {
+        if (!dialog) return
+        setDialogLoading(true)
+
+        if (dialog.type === 'update') {
+            const ok = await executeUpdateHeir(
+                dialog.heir.id,
+                dialog.heir.walletAddress,
+                dialog.newAddress,
+                dialog.newBps,
+            )
+            if (ok) {
+                // Clear the local draft for this heir — store is now source of truth
+                setEdits((prev) => {
+                    const next = { ...prev }
+                    delete next[dialog.heir.id]
+                    return next
+                })
+            }
+        }
+
+        if (dialog.type === 'remove') {
+            await executeRemoveHeir(
+                dialog.heir.id,
+                dialog.heir.walletAddress,
+                dialog.heir.walletAddress, // newHeirAddress required by IDL
+                Number(dialog.heir.shareBps) || 0,
+            )
+        }
+
+        setDialogLoading(false)
+        setDialog(null)
     }
+
+    const anyLoading = addLoading || updateLoading || removeLoading || dialogLoading
 
     return (
-        <div style={{
-            maxWidth: 1100, margin: '0 auto', padding: 24,
-            display: 'grid', gap: 22, background: '#EEEEE9', minHeight: '100vh',
-        }}>
-
-            {/* ── TOP CARD ─────────────────────────────────────────────────────── */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={card}>
-                <div style={eyebrow}>MANAGE HEIRS</div>
-                <div style={title}>Beneficiary Controls</div>
-                <p style={desc}>
-                    Add heirs and assign basis points. Total allocation can never exceed 100 bps.
-                </p>
-
-                {/* Allocation bar */}
-                <div style={{ marginBottom: 18 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span style={meta}>Allocated</span>
-                        <span style={meta}>{totalBps} / 100</span>
-                    </div>
-                    <div style={{ height: 8, borderRadius: 999, background: '#E4E4DF', overflow: 'hidden' }}>
-                        <motion.div
-                            animate={{ width: `${Math.min((totalBps / 100) * 100, 100)}%` }}
-                            transition={{ duration: 0.5, ease: 'easeOut' }}
-                            style={{ height: '100%', background: '#242B35', borderRadius: 999 }}
-                        />
-                    </div>
-                    <div style={{ ...meta, marginTop: 8 }}>Remaining: {100 - totalBps}</div>
-                </div>
-
-                {/* Add row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 180px', gap: 12 }}>
-                    <input
-                        placeholder="Wallet Address"
-                        value={draftAddress}
-                        onChange={(e) => setDraftAddress(e.target.value)}
-                        style={inputStyle}
+        <>
+            {/* ── Confirm dialog overlay ─────────────────────────────────────────── */}
+            <AnimatePresence>
+                {dialog && (
+                    <ConfirmDialog
+                        dialog={dialog}
+                        onConfirm={handleConfirm}
+                        onCancel={() => !dialogLoading && setDialog(null)}
+                        loading={dialogLoading}
                     />
-                    <input
-                        placeholder="BPS"
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={draftBps}
-                        onChange={(e) => setDraftBps(e.target.value)}
-                        style={inputStyle}
-                    />
-                    <button onClick={handleAdd} style={primaryBtn}>
-                        <Plus size={15} />
-                        Add Heir
-                    </button>
-                </div>
-
-                {error && (
-                    <div style={{ marginTop: 12, color: '#dc2626', fontSize: 12, fontWeight: 300 }}>
-                        {error}
-                    </div>
                 )}
-            </motion.div>
+            </AnimatePresence>
 
-            {/* ── HEIR CARDS ───────────────────────────────────────────────────── */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.06 }} style={card}
-            >
-                <div style={eyebrow}>CURRENT HEIRS</div>
+            <div style={{
+                maxWidth: 1100, margin: '0 auto', padding: 24,
+                display: 'grid', gap: 22, background: '#EEEEE9', minHeight: '100vh',
+            }}>
 
-                {heirs.length === 0 ? (
-                    <div style={{ padding: '44px 20px', borderRadius: 22, border: '1px dashed #E4E4DF', textAlign: 'center' }}>
-                        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F7F7F4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                            <Users size={24} color="#555550" />
+                {/* ── ADD CARD ──────────────────────────────────────────────────────── */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={card}>
+                    <div style={eyebrow}>MANAGE HEIRS</div>
+                    <div style={title}>Beneficiary Controls</div>
+                    <p style={desc}>
+                        Add heirs and assign basis points. Total allocation can never exceed 100 bps (100%).
+                    </p>
+
+                    {/* Allocation bar */}
+                    <div style={{ marginBottom: 18 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={meta}>Allocated</span>
+                            <span style={meta}>{totalBps} / 100 bps</span>
                         </div>
-                        <div style={{ fontSize: 16, color: '#1A1A18', fontWeight: 300 }}>No heirs added yet</div>
-                        <div style={{ fontSize: 13, color: '#8A8A82', marginTop: 6 }}>Add your first beneficiary above.</div>
+                        <div style={{ height: 8, borderRadius: 999, background: '#E4E4DF', overflow: 'hidden' }}>
+                            <motion.div
+                                animate={{ width: `${Math.min((totalBps / 100) * 100, 100)}%` }}
+                                transition={{ duration: 0.5, ease: 'easeOut' }}
+                                style={{
+                                    height: '100%', borderRadius: 999,
+                                    background: totalBps >= 100 ? '#dc2626' : '#242B35',
+                                }}
+                            />
+                        </div>
+                        <div style={{ ...meta, marginTop: 8 }}>
+                            Remaining: {100 - totalBps} bps
+                        </div>
                     </div>
-                ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 18 }}>
-                        <AnimatePresence>
-                            {heirs.map((heir, i) => {
-                                const bps = Number(heir.shareBps) || 0
-                                const percent = bps / 100
-                                const deg = (bps / 100) * 360
-                                const isRemoving = removingId === heir.id
 
-                                return (
-                                    <motion.div
-                                        key={heir.id}
-                                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                        animate={{ opacity: isRemoving ? 0.4 : 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                                        transition={{ delay: i * 0.05 }}
-                                        whileHover={{ y: isRemoving ? 0 : -4 }}
-                                        style={heirCard}
-                                    >
-                                        {/* Donut */}
-                                        <div style={{
-                                            width: 110, height: 110, borderRadius: '50%',
-                                            background: `conic-gradient(#242B35 ${deg}deg, #E4E4DF ${deg}deg)`,
-                                            padding: 4,
-                                        }}>
-                                            <div style={{
-                                                width: '100%', height: '100%', borderRadius: '50%', background: '#fff',
-                                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                            }}>
-                                                <div style={{ fontSize: 16, color: '#1A1A18', fontWeight: 300 }}>
-                                                    {percent.toFixed(2)}%
-                                                </div>
-                                                <div style={{ fontSize: 11, color: '#8A8A82' }}>{bps} bps</div>
-                                            </div>
-                                        </div>
-
-                                        {/* Truncated address display */}
-                                        <div style={{ fontSize: 13, color: '#555550' }}>
-                                            {truncate(heir.walletAddress)}
-                                        </div>
-
-                                        {/* Editable address */}
-                                        <input
-                                            value={heir.walletAddress ?? ''}
-                                            onChange={(e) => handleAddressChange(heir.id, e.target.value)}
-                                            placeholder="Wallet address"
-                                            style={inputStyle}
-                                            disabled={updateLoading}
-                                        />
-
-                                        {/* Editable bps */}
-                                        <input
-                                            type="number"
-                                            value={bps}
-                                            onChange={(e) => handleBpsChange(heir.id, e.target.value)}
-                                            style={inputStyle}
-                                            disabled={updateLoading}
-                                        />
-
-                                        {/* Remove */}
-                                        <button
-                                            onClick={() => handleRemove(heir.id)}
-                                            disabled={isRemoving || removeLoading}
-                                            style={{
-                                                ...deleteBtn,
-                                                opacity: isRemoving ? 0.5 : 1,
-                                                cursor: isRemoving ? 'not-allowed' : 'pointer',
-                                            }}
-                                        >
-                                            {isRemoving ? (
-                                                <span style={{ fontSize: 12, color: '#8A8A82' }}>Removing…</span>
-                                            ) : (
-                                                <Trash2 size={14} />
-                                            )}
-                                        </button>
-                                    </motion.div>
-                                )
-                            })}
-                        </AnimatePresence>
+                    {/* Add row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 180px', gap: 12 }}>
+                        <input
+                            placeholder="Wallet address"
+                            value={draftAddress}
+                            onChange={(e) => setDraftAddress(e.target.value)}
+                            style={inputStyle}
+                            disabled={anyLoading}
+                        />
+                        <input
+                            placeholder="BPS (e.g. 50)"
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={draftBps}
+                            onChange={(e) => setDraftBps(e.target.value)}
+                            style={inputStyle}
+                            disabled={anyLoading}
+                        />
+                        <button
+                            onClick={handleAdd}
+                            disabled={anyLoading}
+                            style={{ ...primaryBtn, opacity: anyLoading ? 0.6 : 1 }}
+                        >
+                            <Plus size={15} />
+                            {addLoading ? 'Adding…' : 'Add Heir'}
+                        </button>
                     </div>
-                )}
-            </motion.div>
-        </div>
+
+                    {addError && (
+                        <div style={{ marginTop: 12, color: '#dc2626', fontSize: 12, fontWeight: 300 }}>
+                            {addError}
+                        </div>
+                    )}
+                </motion.div>
+
+                {/* ── HEIR CARDS ────────────────────────────────────────────────────── */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.06 }} style={card}
+                >
+                    <div style={eyebrow}>CURRENT HEIRS</div>
+
+                    {heirs.length === 0 ? (
+                        <div style={{ padding: '44px 20px', borderRadius: 22, border: '1px dashed #E4E4DF', textAlign: 'center' }}>
+                            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F7F7F4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                                <Users size={24} color="#555550" />
+                            </div>
+                            <div style={{ fontSize: 16, color: '#1A1A18', fontWeight: 300 }}>No heirs added yet</div>
+                            <div style={{ fontSize: 13, color: '#8A8A82', marginTop: 6 }}>Add your first beneficiary above.</div>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 18 }}>
+                            <AnimatePresence>
+
+                                <DesignatedHeirs activeHeirs={heirs} avatarColors={[""]} />
+                            </AnimatePresence>
+                        </div>
+                    )}
+                </motion.div>
+            </div>
+        </>
     )
 }
 
-/* ── Styles ──────────────────────────────────────────────────────────────── */
+/* ── Styles ─────────────────────────────────────────────────────────────── */
 
 const card: React.CSSProperties = {
     background: '#FFFFFF', border: '1px solid #E4E4DF',
     borderRadius: 28, padding: 26,
     boxShadow: '0 2px 12px rgba(36,43,53,0.06)',
 }
-
 const eyebrow: React.CSSProperties = {
     fontSize: 11, color: '#8A8A82',
     letterSpacing: '0.14em', fontWeight: 300, marginBottom: 10,
 }
-
 const title: React.CSSProperties = {
     fontSize: 30, color: '#1A1A18', fontWeight: 300, marginBottom: 10,
 }
-
 const desc: React.CSSProperties = {
     fontSize: 14, color: '#555550',
     lineHeight: 1.6, fontWeight: 300, marginBottom: 20,
 }
-
 const meta: React.CSSProperties = {
     fontSize: 12, color: '#8A8A82', fontWeight: 300,
 }
-
 const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px',
     borderRadius: 16, border: '1px solid #E4E4DF',
@@ -309,22 +422,20 @@ const inputStyle: React.CSSProperties = {
     fontSize: 14, fontWeight: 300, outline: 'none',
     boxSizing: 'border-box',
 }
-
 const primaryBtn: React.CSSProperties = {
     border: '1px solid #242B35', background: '#242B35',
     color: '#fff', borderRadius: 16, cursor: 'pointer',
     fontSize: 14, fontWeight: 300,
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
 }
-
 const heirCard: React.CSSProperties = {
     border: '1px solid #E4E4DF', borderRadius: 22,
     padding: 16, background: '#fff',
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+    transition: 'outline 0.15s',
 }
-
 const deleteBtn: React.CSSProperties = {
-    width: '100%', height: 42, borderRadius: 14,
+    height: 40, borderRadius: 12,
     border: '1px solid #E4E4DF', background: '#F7F7F4',
     cursor: 'pointer', color: '#1A1A18',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
