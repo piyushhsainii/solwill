@@ -76,7 +76,7 @@ export function useWithdrawSOL() {
                 if (amountSol <= 0) { toast.error('Amount must be greater than 0'); return false }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
@@ -109,8 +109,6 @@ export function useWithdrawSOL() {
                     .withdrawSolToken(amountLamports)
                     .accounts({
                         signer: ownerPk,
-                        willAccount: willPda,
-                        vault: vaultPda,
                     })
                     .instruction()
 
@@ -163,7 +161,7 @@ export function useWithdrawSPL() {
                 }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
@@ -196,7 +194,7 @@ export function useWithdrawSPL() {
 
                 const ix = await program.methods
                     .withdrawSplToken(amountRaw)
-                    .accounts({
+                    .accountsPartial({
                         signer: ownerPk,
                         willAccount: willPda,
                         ownerAta: ownerAta,

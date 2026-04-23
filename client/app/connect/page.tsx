@@ -20,7 +20,7 @@ type SlideToConnectProps = {
     done: boolean
 }
 
-export function SlideToConnect({ onTriggered, connecting, done }: SlideToConnectProps) {
+function SlideToConnect({ onTriggered, connecting, done }: SlideToConnectProps) {
     const trackRef = useRef<HTMLDivElement>(null)
     const [trackW, setTrackW] = useState(300)
     const knobSize = 52

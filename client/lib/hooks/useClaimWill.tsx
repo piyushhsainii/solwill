@@ -68,7 +68,11 @@ export async function loadWillClaimInfo(
     // Minimal provider (read-only, no wallet needed)
     const provider = new AnchorProvider(
         connection,
-        { publicKey: ownerPk, signTransaction: async (tx) => tx, signAllTransactions: async (txs) => txs } as any,
+        {
+            publicKey: ownerPk,
+            signTransaction: async (tx: any) => tx,
+            signAllTransactions: async (txs: any[]) => txs
+        } as any,
         { commitment: 'confirmed' }
     )
     const program = new Program<DeadWallet>(IDL as Idl, provider)
@@ -159,7 +163,7 @@ export function useClaimWill() {
                 }
 
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const provider = new AnchorProvider(connection, raw, { commitment: 'confirmed' })
+                const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const claimerPk = publicKey

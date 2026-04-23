@@ -56,7 +56,7 @@ export function useCheckinWill() {
 
             const provider = new AnchorProvider(
                 connection,
-                raw,
+                raw as any,
                 { commitment: 'confirmed' }
             )
 
