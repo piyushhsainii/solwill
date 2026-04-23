@@ -13,13 +13,13 @@ export default function PrivvyProviderWrapper({
     return (
         <PrivyProvider
             children={children}
-            appId="cmgy56w8c00m7ie0b754duzgh"
+            appId="cmobc3kxo006h0dlkjha2uwow"
             config={{
                 appearance: {
-                    accentColor: "#6A6FF5",
-                    theme: "#ffffff",
+                    accentColor: "#000000",
+                    theme: "#000000",
                     showWalletLoginFirst: false,
-                    logo: "https://auth.privy.io/logos/privy-logo.png",
+                    logo: "https://solwill.vercel.app/solwill-whitebg.png",
                     walletChainType: "solana-only",
                     walletList: [
                         "detected_solana_wallets",
