@@ -383,8 +383,82 @@ export default function ManageHeirsPage() {
                     ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 18 }}>
                             <AnimatePresence>
+                                {heirs.map((heir, i) => {
+                                    const bps = Number(heir.shareBps) || 0
+                                    const percent = bps / 100
+                                    const deg = (bps / 100) * 360
+                                    const isRemoving = removingId === heir.id
 
-                                <DesignatedHeirs activeHeirs={heirs} avatarColors={[""]} />
+                                    return (
+                                        <motion.div
+                                            key={heir.id}
+                                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                            animate={{ opacity: isRemoving ? 0.4 : 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                                            transition={{ delay: i * 0.05 }}
+                                            whileHover={{ y: isRemoving ? 0 : -4 }}
+                                            style={heirCard}
+                                        >
+                                            {/* Donut */}
+                                            <div style={{
+                                                width: 110, height: 110, borderRadius: '50%',
+                                                background: `conic-gradient(#242B35 ${deg}deg, #E4E4DF ${deg}deg)`,
+                                                padding: 4,
+                                            }}>
+                                                <div style={{
+                                                    width: '100%', height: '100%', borderRadius: '50%', background: '#fff',
+                                                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                                }}>
+                                                    <div style={{ fontSize: 16, color: '#1A1A18', fontWeight: 300 }}>
+                                                        {percent.toFixed(2)}%
+                                                    </div>
+                                                    <div style={{ fontSize: 11, color: '#8A8A82' }}>{bps} bps</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Truncated address display */}
+                                            <div style={{ fontSize: 13, color: '#555550' }}>
+                                                {truncate(heir.walletAddress)}
+                                            </div>
+
+                                            {/* Editable address */}
+                                            <input
+                                                value={heir.walletAddress ?? ''}
+                                                onChange={(e) => handleAddressChange(heir.id, e.target.value)}
+                                                placeholder="Wallet address"
+                                                style={inputStyle}
+                                                disabled={updateLoading}
+                                            />
+
+                                            {/* Editable bps */}
+                                            <input
+                                                type="number"
+                                                value={bps}
+                                                onChange={(e) => handleBpsChange(heir.id, e.target.value)}
+                                                style={inputStyle}
+                                                disabled={updateLoading}
+                                            />
+
+                                            {/* Remove */}
+                                            <button
+                                                onClick={() => handleRemove(heir.id)}
+                                                disabled={isRemoving || removeLoading}
+                                                style={{
+                                                    ...deleteBtn,
+                                                    opacity: isRemoving ? 0.5 : 1,
+                                                    cursor: isRemoving ? 'not-allowed' : 'pointer',
+                                                }}
+                                            >
+                                                {isRemoving ? (
+                                                    <span style={{ fontSize: 12, color: '#8A8A82' }}>Removing…</span>
+                                                ) : (
+                                                    <Trash2 size={14} />
+                                                )}
+                                            </button>
+                                        </motion.div>
+                                    )
+                                })}
+                                {/* <DesignatedHeirs activeHeirs={heirs} avatarColors={[""]} /> */}
                             </AnimatePresence>
                         </div>
                     )}

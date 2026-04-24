@@ -34,7 +34,7 @@ pub fn withdraw_sol(ctx:Context<WithdrawSol>, amt:u32) -> Result<()> {
     require!(ctx.accounts.signer.key() == ctx.accounts.will_account.owner.key(), Errors::Unauthorised_Depositor);
 
 
-    require!(ctx.accounts.vault.get_lamports() >= amt as u64, Errors::Math_Error);
+    require!(ctx.accounts.will_account.total_bal  >= amt , Errors::Math_Error);
     // transfer the sol back to the will owner
     let will_key = ctx.accounts.will_account.key();
     let signer_seeds:&[&[&[u8]]] = &[&[b"vault", will_key.as_ref(), &[ctx.bumps.vault]]];

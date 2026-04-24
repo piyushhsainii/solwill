@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { AnchorProvider, Program } from '@coral-xyz/anchor'
-import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js'
+import { clusterApiUrl, Connection, PublicKey, Transaction } from '@solana/web3.js'
 import toast from 'react-hot-toast'
 import IDL from '../idl/idl.json'
 import { DeadWallet } from '../idl/idl'
@@ -12,7 +12,7 @@ import { useSollWillWallet } from './useSolWillWallet'
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { buildAndSend } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('6twd3FcXK7HKvfCJfEDod2JtMCXCs9P1Tzk8ymG5yxkK')
+const PROGRAM_ID = new PublicKey('4pHVi1JXM5BL64Z92iH57wBxqdC3DWfsLgyCG9jDnUZx')
 const RPC_URL = clusterApiUrl('devnet')
 
 export function useDissolveWill() {
@@ -60,8 +60,20 @@ export function useDissolveWill() {
                     .accounts({ signer: wallet.address, tokenProgram: TOKEN_PROGRAM_ID })
                     .instruction()
 
-                const sig = await buildAndSend(wallet, connection, ix, new PublicKey(wallet.address))
 
+                const bx = await connection.getLatestBlockhash();
+                const tx = new Transaction({
+                    feePayer: new PublicKey(wallet.address),
+                    blockhash: bx.blockhash,
+                    lastValidBlockHeight: bx.lastValidBlockHeight,
+
+                }).add(ix);
+
+                let logs = await connection.simulateTransaction(tx);
+                console.log(logs)
+                // const sig = await buildAndSend(wallet, connection, ix, new PublicKey(wallet.address))
+
+                console.log(sig)
                 toast.success('Will dissolved successfully.', { id: toastId })
 
                 // Clear store state since the will no longer exists on-chain

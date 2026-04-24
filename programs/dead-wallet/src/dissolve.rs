@@ -52,21 +52,9 @@ pub fn dissolve<'info>(ctx: Context<'_, '_, 'info, 'info, Dissolve<'info>>) -> R
     require!(will_account.assets.len() * 3 == accounts.len(), Errors::DissolveFundsAccountsNotValid);
     require!(accounts.len() % 3 == 0, Errors::DissolveFundsAccountsNotValid);    
     
-    // SOL TRANSFER
-    let ix = CpiContext::new_with_signer(
-        system_program.to_account_info().clone(), 
-        Transfer {
-            from:vault_info.to_account_info().clone(),
-            to:signer.to_account_info().clone(),
-        },
-        signer_seeds);
-        
-        system_program::transfer(ix, lamports)?;
-        
-        
-        let mut dissolved_accounts = vec![];
-        let mut i  = 0;
-        
+    let mut dissolved_accounts = vec![];
+    let mut i  = 0;
+    
  
 
     while i < accounts.len() {
