@@ -1,7 +1,7 @@
 use anchor_lang::{prelude::{ *},  system_program::{self, Transfer} };
 use anchor_spl::{associated_token::get_associated_token_address, token::{TransferChecked, transfer_checked}, token_interface::{CloseAccount, Mint, TokenAccount, TokenInterface, Transfer as TokenTransfer}};
 
-use crate::{states::{Vault, WillAccount}, error::Errors};
+use crate::{Heir, error::Errors, states::{Vault, WillAccount}};
 
 
 #[derive(Accounts)]
@@ -49,15 +49,14 @@ pub fn dissolve<'info>(ctx: Context<'_, '_, 'info, 'info, Dissolve<'info>>) -> R
     
     require!(signer.key() == will_account.owner, Errors::Owner_Not_Valid);
     require!(will_account.claimed == false, Errors::Will_Already_Claimed);
-    require!(will_account.assets.len() * 3 == accounts.len(), Errors::DissolveFundsAccountsNotValid);
-    require!(accounts.len() % 3 == 0, Errors::DissolveFundsAccountsNotValid);    
+    require!(((will_account.assets.len() * 3 ) + will_account.heir_count as usize) == accounts.len(), Errors::DissolveFundsAccountsNotValid);
     
     let mut dissolved_accounts = vec![];
     let mut i  = 0;
     
- 
+    let heir_start = will_account.assets.len() * 3;
 
-    while i < accounts.len() {
+    while i < heir_start {
         
         let vault_ata = &accounts[i];
         let owner_ata = &accounts[i + 1];
@@ -102,5 +101,28 @@ pub fn dissolve<'info>(ctx: Context<'_, '_, 'info, 'info, Dissolve<'info>>) -> R
        dissolved_accounts.push(vault_mint.key());
        i +=3;
     }
+
+    // Close all the heir accounts
+
+   for i in heir_start..accounts.len() {
+    let heir_account = &accounts[i];
+    let heir_data = Account::<Heir>::try_from(heir_account)?;
+    
+    let (expected_pda, _) = Pubkey::find_program_address(
+        &[b"heir", heir_data.wallet_address.as_ref(), will_key.as_ref()],
+        ctx.program_id
+    );
+    
+    require!(heir_account.key() == expected_pda, Errors::InvalidHeirAccount);
+
+    let lamports = heir_account.lamports();
+    **heir_account.try_borrow_mut_lamports()? -= lamports;
+    **signer.to_account_info().try_borrow_mut_lamports()? += lamports;
+
+    let mut data = heir_account.try_borrow_mut_data()?;
+    data.fill(0);
+}
+
+
     Ok(())
 }

@@ -38,7 +38,9 @@ pub enum Errors {
     #[msg("Max Limit Reached to add heirs")]
     HeirMaxLimitReached,
     #[msg("DeadlineAlreadyPassed")]
-    WillDeadlinePassed
+    WillDeadlinePassed,
+    #[msg("Invalid Heir Account")]
+    InvalidHeirAccount
 
 
 }
