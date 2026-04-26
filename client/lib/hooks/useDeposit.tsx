@@ -27,6 +27,7 @@ const RPC_URL = clusterApiUrl('devnet')
 /* ─── shared tx helper ───────────────────────────────────────────── */
 import { VersionedTransaction, TransactionMessage } from '@solana/web3.js'
 import { buildAndSend, getTokenProgramForMint } from '../utils/helper'
+import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
 
@@ -37,7 +38,7 @@ import { DeadWallet } from '../idl/idl'
    ═══════════════════════════════════════════════════════════════════ */
 export function useDepositSOL() {
     const { raw, ready, loading: walletLoading, connected, publicKey } = useSollWillWallet()
-    const { refresh } = useAnchorProvider()
+    const { refresh } = useAnchor()
     const setTxPending = useWillStore(s => s.setTxPending)
 
     const [loading, setLoading] = useState(false)

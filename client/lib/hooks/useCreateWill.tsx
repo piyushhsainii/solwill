@@ -16,11 +16,12 @@ import {
 import toast from 'react-hot-toast'
 
 import IDL from '../idl/idl.json'
-import type { DeadWallet } from '../idl/idl'
 import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
+import { useAnchor } from '@/app/(protected)/layout'
+import { DeadWallet } from '../idl/idl'
 
 const PROGRAM_ID = new PublicKey(
     '6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx'
@@ -39,7 +40,7 @@ export function useCreateWill() {
         publicKey,
     } = useSollWillWallet()
 
-    const { refresh } = useAnchorProvider()
+    const { refresh } = useAnchor()
     const setTxPending = useWillStore((s) => s.setTxPending)
 
     const [loading, setLoading] = useState(false)

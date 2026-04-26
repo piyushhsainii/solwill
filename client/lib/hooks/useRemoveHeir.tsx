@@ -4,10 +4,11 @@ import { AnchorProvider, Program, Idl } from '@coral-xyz/anchor'
 import { useWillStore } from '@/app/store/useWillStore'
 import { toast } from 'sonner'
 import { useSollWillWallet } from './useSolWillWallet'
-import { DeadWallet } from '../idl/idl'
 import IDL from '../idl/idl.json'
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 import { useAnchorProvider } from './useAnchorProvider'
+import { useAnchor } from '@/app/(protected)/layout'
+import { DeadWallet } from '../idl/idl'
 
 const RPC_URL = clusterApiUrl('devnet')
 
@@ -21,7 +22,7 @@ export function useRemoveHeir() {
 
     const removeHeir = useWillStore((s) => s.removeHeir)
     const setTxPending = useWillStore((s) => s.setTxPending)
-    const { refresh } = useAnchorProvider()
+    const { refresh } = useAnchor()
 
     const { raw, ready, loading, connected, publicKey } = useSollWillWallet()
 
@@ -136,10 +137,7 @@ export function useRemoveHeir() {
                 toast.success('Check-in recorded on-chain!', { id: toastId })
 
                 // Refresh store with updated lastCheckIn
-                // await refresh()
-
-                // Remove from Zustand only after on-chain success
-                removeHeir(storeId)
+                await refresh()
 
                 toast.success('Heir removed!', { id: toastId })
                 return true

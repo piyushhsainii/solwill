@@ -3,21 +3,21 @@
 import { useCallback, useState } from 'react'
 import { AnchorProvider, Program } from '@coral-xyz/anchor'
 import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js'
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import toast from 'react-hot-toast'
 import IDL from '../idl/idl.json'
-import { DeadWallet } from '../idl/idl'
-import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { buildAndSend } from '../utils/helper'
+import { DeadWallet } from '../idl/idl'
+import { useAnchor } from '@/app/(protected)/layout'
 
-const PROGRAM_ID = new PublicKey('6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx')
 const RPC_URL = clusterApiUrl('devnet')
 
 export function useDissolveWill() {
+    // Read wallet identity only — no Connection, no Program, no RPC
     const { raw: wallet } = useSollWillWallet()
-    const { refresh } = useAnchorProvider()
+    const { refresh } = useAnchor()
     const setTxPending = useWillStore((s) => s.setTxPending)
 
     const [loading, setLoading] = useState(false)
@@ -25,9 +25,14 @@ export function useDissolveWill() {
 
     const dissolveWill = useCallback(
         async (): Promise<boolean> => {
-            // Everything is built here — nothing runs until the user clicks
+            // ── Guard: all checks before touching any network ──────────
             if (!wallet?.address || !wallet.signTransaction) {
                 toast.error('Wallet not connected.')
+                return false
+            }
+
+            if (typeof wallet.signAndSendTransaction !== 'function') {
+                toast.error('Wallet does not support signing. Please reconnect.')
                 return false
             }
 
@@ -38,25 +43,31 @@ export function useDissolveWill() {
             const toastId = toast.loading('Dissolving will…')
 
             try {
-                // Lazy — only created when actually needed
+                // ── Lazy: Connection + Program created only on user action ──
+                const ownerPk = new PublicKey(wallet.address)
                 const connection = new Connection(RPC_URL, 'confirmed')
-                const anchorWallet = {
-                    publicKey: wallet.address,
-                    signTransaction: (tx: any) => wallet.signTransaction!(tx),
-                }
-                const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' })
+
+                const provider = new AnchorProvider(
+                    connection,
+                    wallet as any,
+                )
+
                 const program = new Program<DeadWallet>(IDL as any, provider)
 
                 const ix = await program.methods
                     .dissolveWill()
-                    .accounts({ signer: wallet.address, tokenProgram: TOKEN_PROGRAM_ID })
+                    .accounts({
+                        signer: ownerPk,
+                        tokenProgram: TOKEN_PROGRAM_ID,
+                    })
                     .instruction()
 
-                const sig = await buildAndSend(wallet, connection, ix, new PublicKey(wallet.address))
-                console.log('Dissolve sig:', sig)
+                const sig = await buildAndSend(wallet, connection, ix, ownerPk)
+                console.log('[useDissolveWill] sig:', sig)
 
                 toast.success('Will dissolved successfully.', { id: toastId })
 
+                // Clear store immediately — no need to wait for refresh
                 useWillStore.setState({
                     willAccount: null,
                     vaultAccount: null,
@@ -75,7 +86,7 @@ export function useDissolveWill() {
                 setTxPending(false)
             }
         },
-        [wallet, refresh, setTxPending]
+        [wallet?.address, refresh, setTxPending]
     )
 
     return { dissolveWill, loading, error }

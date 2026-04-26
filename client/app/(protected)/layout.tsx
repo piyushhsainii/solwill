@@ -7,6 +7,7 @@ import { useWillStore } from '@/app/store/useWillStore'
 import { useAnchorProvider } from '@/lib/hooks/useAnchorProvider'
 import Sidebar from '@/components/ui/sidebar'
 import { UseAnchorProviderReturn } from '@/lib/utils/helper'
+import FullScreenLoader from '@/components/ui/MasterSpinner'
 
 type AnchorCtxValue = Pick<UseAnchorProviderReturn, 'refresh' | 'program' | 'pdas' | 'loading'>
 
@@ -31,18 +32,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     // One simple spinner until Privy is ready
     if (!ready || !authenticated) {
         return (
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                color: 'var(--color-text-secondary)',
-                fontSize: 14,
-                gap: 10,
-            }}>
-                <Spinner />
-                {!ready ? 'Initialising…' : 'Redirecting…'}
-            </div>
+            <FullScreenLoader />
         )
     }
 

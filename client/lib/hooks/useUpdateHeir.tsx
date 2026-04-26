@@ -4,10 +4,9 @@ import { AnchorProvider, Program, Idl } from '@coral-xyz/anchor'
 import { useWillStore } from '@/app/store/useWillStore'
 import { toast } from 'sonner'
 import { useSollWillWallet } from './useSolWillWallet'
-import { DeadWallet } from '../idl/idl'
 import IDL from '../idl/idl.json'
-import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 import { buildAndSend } from '../utils/helper'
+import { DeadWallet } from '../idl/idl'
 
 const RPC_URL = clusterApiUrl('devnet')
 
