@@ -3,7 +3,6 @@ import Hero from '@/components/Landing/Hero'
 import Problem from '@/components/Landing/Problem'
 import HowItWorks from '@/components/Landing/HowItWorks'
 import Features from '@/components/Landing/Features'
-import Judges from '@/components/Landing/Judges'
 import CTA from '@/components/Landing/CTA'
 import Footer from '@/components/Landing/Footer'
 
@@ -16,7 +15,6 @@ export default function Home() {
         <Problem />
         <HowItWorks />
         <Features />
-        <Judges />
         <CTA />
       </main>
       <Footer />
