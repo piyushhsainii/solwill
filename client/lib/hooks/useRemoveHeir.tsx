@@ -12,7 +12,7 @@ import { DeadWallet } from '../idl/idl'
 
 const RPC_URL = clusterApiUrl('devnet')
 
-const PROGRAM_ID = new PublicKey('6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx')
+const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
 const WILL_SEED = Buffer.from([119, 105, 108, 108])
 const HEIR_SEED = Buffer.from([104, 101, 105, 114])
 

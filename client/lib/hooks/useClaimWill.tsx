@@ -21,7 +21,7 @@ import IDL from '../idl/idl.json'
 import { useSollWillWallet } from './useSolWillWallet'
 import { DeadWallet } from '../idl/idl'
 
-const PROGRAM_ID = new PublicKey('6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx')
+const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const HEIR_SEED = Buffer.from('heir')

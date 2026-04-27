@@ -3,14 +3,14 @@
 import { useCallback, useState } from 'react'
 import { AnchorProvider, Program } from '@coral-xyz/anchor'
 import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import toast from 'react-hot-toast'
 import IDL from '../idl/idl.json'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 import { buildAndSend } from '../utils/helper'
-import { DeadWallet } from '../idl/idl'
 import { useAnchor } from '@/app/(protected)/layout'
+import { DeadWallet } from '../idl/idl'
 
 const RPC_URL = clusterApiUrl('devnet')
 
@@ -25,7 +25,6 @@ export function useDissolveWill() {
 
     const dissolveWill = useCallback(
         async (): Promise<boolean> => {
-            // ── Guard: all checks before touching any network ──────────
             if (!wallet?.address || !wallet.signTransaction) {
                 toast.error('Wallet not connected.')
                 return false
@@ -43,16 +42,51 @@ export function useDissolveWill() {
             const toastId = toast.loading('Dissolving will…')
 
             try {
-                // ── Lazy: Connection + Program created only on user action ──
                 const ownerPk = new PublicKey(wallet.address)
                 const connection = new Connection(RPC_URL, 'confirmed')
+                const provider = new AnchorProvider(connection, wallet as any)
+                const program = new Program<DeadWallet>(IDL as any, provider)
 
-                const provider = new AnchorProvider(
-                    connection,
-                    wallet as any,
+                // ── Derive PDAs ──────────────────────────────────────────
+                const [willPda] = PublicKey.findProgramAddressSync(
+                    [Buffer.from('will'), ownerPk.toBuffer()],
+                    program.programId
                 )
 
-                const program = new Program<DeadWallet>(IDL as any, provider)
+                // ── Build remaining accounts ─────────────────────────────
+                // Order: [vault_ata, owner_ata, mint] * assets.len()  then  [heir_pda] * heir_count
+                const assets = useWillStore.getState().vaultAccount?.assets ?? []
+                const heirs = useWillStore.getState().heirs ?? []
+
+                const [vaultPda] = PublicKey.findProgramAddressSync(
+                    [Buffer.from('vault'), willPda.toBuffer()],
+                    program.programId
+                )
+
+                const assetAccounts = assets
+                    .filter((asset) => asset.symbol !== 'SOL')  // 👈 skip SOL
+                    .flatMap((asset) => {
+                        const mintPk = new PublicKey(asset.mint!)
+                        const vaultAta = getAssociatedTokenAddressSync(mintPk, vaultPda, true)
+                        const ownerAta = getAssociatedTokenAddressSync(mintPk, ownerPk)
+
+                        return [
+                            { pubkey: vaultAta, isSigner: false, isWritable: true },
+                            { pubkey: ownerAta, isSigner: false, isWritable: true },
+                            { pubkey: mintPk, isSigner: false, isWritable: false },
+                        ]
+                    })
+
+                const heirAccounts = heirs.map((heir) => {
+                    const heirOriginalPk = new PublicKey(heir.walletAddress)
+                    const [heirPda] = PublicKey.findProgramAddressSync(
+                        [Buffer.from('heir'), heirOriginalPk.toBuffer(), willPda.toBuffer()],
+                        program.programId
+                    )
+                    return { pubkey: heirPda, isSigner: false, isWritable: true }
+                })
+
+                const remainingAccounts = [...assetAccounts, ...heirAccounts]
 
                 const ix = await program.methods
                     .dissolveWill()
@@ -60,6 +94,7 @@ export function useDissolveWill() {
                         signer: ownerPk,
                         tokenProgram: TOKEN_PROGRAM_ID,
                     })
+                    .remainingAccounts(remainingAccounts)
                     .instruction()
 
                 const sig = await buildAndSend(wallet, connection, ix, ownerPk)
@@ -67,7 +102,6 @@ export function useDissolveWill() {
 
                 toast.success('Will dissolved successfully.', { id: toastId })
 
-                // Clear store immediately — no need to wait for refresh
                 useWillStore.setState({
                     willAccount: null,
                     vaultAccount: null,

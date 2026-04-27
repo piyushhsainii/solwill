@@ -18,7 +18,7 @@ import { DeadWallet } from '../idl/idl'
 import { useSollWillWallet } from './useSolWillWallet'
 import { UseAnchorProviderReturn } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx')
+const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com'
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')

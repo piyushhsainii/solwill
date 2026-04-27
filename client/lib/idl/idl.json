@@ -1,5 +1,5 @@
 {
-  "address": "6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx",
+  "address": "C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527",
   "metadata": {
     "name": "dead_wallet",
     "version": "0.1.0",
@@ -1291,6 +1291,11 @@
       "code": 6017,
       "name": "WillDeadlinePassed",
       "msg": "DeadlineAlreadyPassed"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidHeirAccount",
+      "msg": "Invalid Heir Account"
     }
   ],
   "types": [

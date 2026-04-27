@@ -19,7 +19,7 @@ import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 
-const PROGRAM_ID = new PublicKey('6Qu5vc8BYaBetkA9gkmy7D2JCQmyVyR6CCcaQjyA4sCx')
+const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const RPC_URL = clusterApiUrl('devnet')
