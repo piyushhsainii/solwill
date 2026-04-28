@@ -23,6 +23,12 @@ const stagger = {
     show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
 }
 
+// ── Helper: normalise shareBps to a 0-100 percentage ──
+// Handles both "already a %" (e.g. 100) and "bps" (e.g. 10000)
+function bpsToPercent(shareBps: number): number {
+    return shareBps > 100 ? shareBps / 100 : shareBps
+}
+
 /* ── Tiny avatar initials ── */
 function HeirAvatar({ address }: { address: string }) {
     const initials = address.slice(0, 2).toUpperCase()
@@ -97,7 +103,8 @@ export default function AddHeirsStep({
     const [heirStatuses, setHeirStatuses] = useState<Record<string, HeirStatus>>({})
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const totalAllocated = heirs.reduce((s, h) => s + h.shareBps, 0)
+    // Normalise each heir's shareBps to a 0-100 percent for display/logic
+    const totalAllocated = heirs.reduce((s, h) => s + bpsToPercent(h.shareBps), 0)
     const remaining = 100 - totalAllocated
     const effectiveShare = Math.max(0, Math.min(share, remaining <= 0 ? 0 : remaining))
     const canProceed = heirs.length > 0 && totalAllocated === 100 && !isSubmitting
@@ -143,7 +150,7 @@ export default function AddHeirsStep({
                 }
                 .address-input-wrap {
                     flex: 1;
-                    min-width: 0; /* critical — prevents flex child from overflowing */
+                    min-width: 0;
                 }
                 .address-input {
                     width: 100%;
@@ -161,7 +168,7 @@ export default function AddHeirsStep({
                 .add-btn {
                     width: 46px;
                     height: 46px;
-                    min-width: 46px; /* don't let it shrink */
+                    min-width: 46px;
                     border-radius: 14px;
                     border: none;
                     color: white;
@@ -186,12 +193,12 @@ export default function AddHeirsStep({
                 }
                 .allocation-card-inner {
                     flex: 1;
-                    min-width: 0; /* prevent overflow */
+                    min-width: 0;
                 }
                 .heir-row {
                     display: flex;
                     align-items: center;
-                    gap: 8px; /* tighter on mobile */
+                    gap: 8px;
                     min-width: 0;
                 }
                 .heir-address {
@@ -211,10 +218,9 @@ export default function AddHeirsStep({
                 }
                 .heir-info {
                     flex: 1;
-                    min-width: 0; /* allows text truncation to work */
+                    min-width: 0;
                     overflow: hidden;
                 }
-                /* shrink share pill on very small screens */
                 @media (max-width: 380px) {
                     .share-pill {
                         display: none;
@@ -412,6 +418,8 @@ export default function AddHeirsStep({
                         >
                             {heirs.map((heir, idx) => {
                                 const status = heirStatuses[heir.id] ?? 'idle'
+                                // Normalise to percent for display
+                                const displayPct = bpsToPercent(heir.shareBps)
                                 return (
                                     <motion.div
                                         key={heir.id}
@@ -488,7 +496,6 @@ export default function AddHeirsStep({
                                                 <div className="heir-row">
                                                     <HeirAvatar address={heir.walletAddress} />
 
-                                                    {/* Text — must have min-width:0 to truncate */}
                                                     <div className="heir-info">
                                                         <div className="heir-address">
                                                             {heir.walletAddress.slice(0, 6)}…{heir.walletAddress.slice(-4)}
@@ -497,18 +504,18 @@ export default function AddHeirsStep({
                                                             fontSize: 11, color: 'var(--text-secondary)',
                                                             marginTop: 2, letterSpacing: '-0.01em',
                                                         }}>
-                                                            {heir.shareBps}% share
+                                                            {displayPct}% share
                                                         </div>
                                                     </div>
 
-                                                    {/* Share pill — hidden on very small screens via CSS */}
+                                                    {/* Share pill */}
                                                     <div className="share-pill" style={{
                                                         padding: '4px 10px', borderRadius: 999,
                                                         background: 'var(--primary)',
                                                         color: 'white', fontSize: 11, fontWeight: 600,
                                                         letterSpacing: '-0.01em', flexShrink: 0,
                                                     }}>
-                                                        {heir.shareBps}%
+                                                        {displayPct}%
                                                     </div>
 
                                                     {/* Status / action buttons */}
@@ -557,7 +564,12 @@ export default function AddHeirsStep({
                                                             <>
                                                                 <motion.button
                                                                     whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }}
-                                                                    onClick={() => { setEditingId(heir.id); setEditAddr(heir.walletAddress); setEditShare(heir.shareBps) }}
+                                                                    onClick={() => {
+                                                                        setEditingId(heir.id)
+                                                                        setEditAddr(heir.walletAddress)
+                                                                        // Pre-fill edit field with the human-readable percent
+                                                                        setEditShare(displayPct)
+                                                                    }}
                                                                     style={{
                                                                         width: 30, height: 30, minWidth: 30, borderRadius: 8,
                                                                         border: '1px solid var(--border)',

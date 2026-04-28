@@ -1,5 +1,5 @@
 use anchor_lang::{prelude::{ *},  system_program::{self, Transfer} };
-use anchor_spl::{associated_token::get_associated_token_address, token::{TransferChecked, transfer_checked}, token_interface::{CloseAccount, Mint, TokenAccount, TokenInterface, Transfer as TokenTransfer}};
+use anchor_spl::{associated_token::{get_associated_token_address, spl_associated_token_account}, token::{TransferChecked, transfer_checked}, token_interface::{CloseAccount, Mint, TokenAccount, TokenInterface, Transfer as TokenTransfer}};
 
 use crate::{Heir, error::Errors, states::{Vault, WillAccount}};
 
@@ -69,8 +69,17 @@ pub fn dissolve<'info>(ctx: Context<'_, '_, 'info, 'info, Dissolve<'info>>) -> R
         require!(!dissolved_accounts.contains(&vault_mint.key()), Errors::MintAccountNotValid);
         require!(vault_ata_data.mint == vault_mint.key(),Errors::MintAccountNotValid);
         
-        let expected = get_associated_token_address(&signer.key(), &vault_mint.key());
-        // 
+        // Derive ATA manually with the correct token program
+       let associated_token_program_id = anchor_spl::associated_token::ID;
+       let expected = Pubkey::find_program_address(
+            &[
+                signer.key().as_ref(),
+                vault_mint.owner.as_ref(),   // ← token program (works for both Token and Token-2022)
+                vault_mint.key().as_ref(),
+            ],
+            &associated_token_program_id,
+        ).0;
+
         require!(owner_ata.key() == expected, Errors::OwnerATANotCorrect);
         // transfer back from each vault_ata 
         let cpi_ctx = CpiContext::new_with_signer(

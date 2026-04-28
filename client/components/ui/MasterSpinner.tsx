@@ -2,6 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { LoadingStep } from '@/lib/utils/helper'
+
+const STEP_MESSAGES: Record<LoadingStep, string> = {
+    wallet: 'Connecting wallet…',
+    chain: 'Loading your will from chain…',
+    done: 'Almost there…',
+}
+
+interface FullScreenLoaderProps {
+    label?: string
+    step?: LoadingStep
+}
 
 const MESSAGES = [
     'Initialising vault…',
@@ -13,33 +25,33 @@ const MESSAGES = [
 
 interface FullScreenLoaderProps {
     label?: string
+    step?: LoadingStep   // ← must be LoadingStep, not string
 }
-
-export default function FullScreenLoader({ label }: FullScreenLoaderProps) {
+export default function FullScreenLoader({ label, step }: FullScreenLoaderProps) {
     const [msgIndex, setMsgIndex] = useState(0)
     const [progress, setProgress] = useState(0)
 
-    // Cycle through messages
     useEffect(() => {
+        if (step) return  // ← skip cycling if we have a real step
         const iv = setInterval(() => {
             setMsgIndex(i => (i + 1) % MESSAGES.length)
         }, 1800)
         return () => clearInterval(iv)
-    }, [])
+    }, [step])
 
-    // Animate progress bar (fake, aesthetic only)
+    // Progress bar: reset and re-animate when step changes
     useEffect(() => {
+        setProgress(0)
         let p = 0
         const iv = setInterval(() => {
-            // Accelerate fast then slow down near end
             const step = p < 60 ? 3 : p < 85 ? 1 : 0.3
             p = Math.min(p + step, 92)
             setProgress(p)
         }, 80)
         return () => clearInterval(iv)
-    }, [])
+    }, [step])  // ← re-run per step, not per mount
 
-    const displayMsg = label ?? MESSAGES[msgIndex]
+    const displayMsg = label ?? (step ? STEP_MESSAGES[step as LoadingStep] : MESSAGES[msgIndex])
 
     return (
         <div style={{

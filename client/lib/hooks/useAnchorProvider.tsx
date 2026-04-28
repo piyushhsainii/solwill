@@ -16,9 +16,9 @@ import { useWillStore, type Asset } from '../../app/store/useWillStore'
 import IDL from '../idl/idl.json'
 import { DeadWallet } from '../idl/idl'
 import { useSollWillWallet } from './useSolWillWallet'
-import { UseAnchorProviderReturn } from '../utils/helper'
+import { LoadingStep, UseAnchorProviderReturn } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
+const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com'
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
@@ -118,6 +118,8 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
     const wallet = useSollWillWallet()
 
     const [loading, setLoading] = useState(true)
+    const [initializing, setInitializing] = useState(true)  // ← add this
+    const [loadingStep, setLoadingStep] = useState<LoadingStep>('wallet')
     const [error, setError] = useState<Error | null>(null)
     const [heirs, setHeirs] = useState<any[]>([])
 
@@ -268,6 +270,7 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
             setError(e)
         } finally {
             setLoading(false)
+            setInitializing(false)  // ← only flipped once, never again
             isRefreshingRef.current = false
         }
     }, [])
@@ -288,10 +291,15 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
 
         const publicKey = wallet.publicKey
         const raw = wallet.raw
-
+        if (!wallet.ready || wallet.loading || !address) {
+            setLoading(true)
+            setLoadingStep('wallet')   // ← waiting on wallet
+            return
+        }
         const init = async () => {
             try {
                 setLoading(true)
+                setLoadingStep('chain')
                 setError(null)
 
                 const conn = new Connection(RPC_URL, 'confirmed')
@@ -315,6 +323,7 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                 if (willAccount !== null || vaultAccount !== null) {
                     console.log('[init] store has data — skipping RPC')
                     setLoading(false)
+                    setInitializing(false)  // ← add this
                     return
                 }
 
@@ -379,10 +388,11 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                         symbol: 'SOL',
                         amount: solAmount,
                         usdPrice: solPrice,
-                        usdValue: 0,
+                        usdValue: solAmount * solPrice,
+                        decimals: 9,
                         icon: "/sol-logo.png",
-                        mint: "",
-                        decimals: 9
+                        mint: SOL_MINT
+
                     },
                     ...splAssets.map((a) => ({
                         ...a,
@@ -395,21 +405,6 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                         decimals: a.decimals
                     })),
                 ]
-
-                // const solAsset: Asset = {
-                //     symbol: 'SOL',
-                //     amount: solAmount,
-                //     usdPrice: solPrice,
-                //     usdValue: solAmount * solPrice,
-                // }
-
-                // const hydratedSpl = splAssets.map((a) => ({
-                //     ...a,
-                //     usdPrice: prices[a.mint!] ?? 0,
-                //     usdValue: (prices[a.mint!] ?? 0) * a.amount,
-                // }))
-
-                // const allAssets = [solAsset, ...hydratedSpl].filter((a) => a.amount > 0)
 
                 const processedVault: VaultData = {
                     sol: solAmount,
@@ -453,6 +448,8 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
                 setError(e as Error)
             } finally {
                 setLoading(false)
+                setLoadingStep('done')
+                setInitializing(false)  // ← add this
             }
         }
 
@@ -461,6 +458,8 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
 
     return {
         loading,
+        initializing,
+        loadingStep,
         error,
         refresh: runRefresh,
         program: programRef.current,

@@ -8,13 +8,12 @@ import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 
 import IDL from '../idl/idl.json'
 
-import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
-const PROGRAM_ID = new PublicKey('C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527')
+const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
 const WILL_SEED = Buffer.from('will')
 const HEIR_SEED = Buffer.from('heir')
 const RPC_URL = clusterApiUrl('devnet')

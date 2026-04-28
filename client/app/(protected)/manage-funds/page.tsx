@@ -9,6 +9,7 @@ import { useDepositSOL, useDepositSPL } from '@/lib/hooks/useDeposit'
 import { useWillStore } from '@/app/store/useWillStore'
 import { SOL_LOGO, SPL_TOKENS, Token, TOKEN_LOGO_MAP, TOKENS } from '@/lib/utils/helper'
 import AccordionCard from '@/components/ui/accordion-card'
+import { useWithdrawSOL, useWithdrawSPL } from '@/lib/hooks/useWithdraw'
 
 const RPC_URL = 'https://api.devnet.solana.com'
 
@@ -321,9 +322,16 @@ function Divider() {
 
 export default function ManageFundsPage() {
     const solPrice = useSolPrice()
+
+    // ── Deposit hooks ────────────────────────────────────────────────
     const { depositSOL, loading: depositSolLoading } = useDepositSOL()
     const { depositSPL, loading: depositSplLoading } = useDepositSPL()
 
+    // ── Withdraw hooks ───────────────────────────────────────────────
+    const { withdrawSOL, loading: withdrawSolLoading } = useWithdrawSOL()
+    const { withdrawSPL, loading: withdrawSplLoading } = useWithdrawSPL()
+
+    // ── Store ────────────────────────────────────────────────────────
     const vaultAccount = useWillStore(s => s.vaultAccount)
     const vaultSol = vaultAccount?.sol ?? 0
     const vaultAssets = vaultAccount?.assets ?? []
@@ -333,29 +341,34 @@ export default function ManageFundsPage() {
         .map(a => {
             const known = TOKENS.find(t => t.symbol === a.symbol)
             return {
-                symbol: a.symbol, name: known?.name ?? a.symbol,
-                mint: a.mint ?? known?.mint ?? '', decimals: known?.decimals ?? 6,
+                symbol: a.symbol,
+                name: known?.name ?? a.symbol,
+                mint: a.mint ?? known?.mint ?? '',
+                decimals: known?.decimals ?? 6,
                 logo: TOKEN_LOGO_MAP[a.symbol] ?? known?.logo ?? SOL_LOGO,
                 vaultBalance: a.amount,
             }
         })
 
+    // ── Panel open state ─────────────────────────────────────────────
     const [depositOpen, setDepositOpen] = useState(true)
     const [withdrawOpen, setWithdrawOpen] = useState(true)
 
-    // Deposit state
+    // ── Deposit state ────────────────────────────────────────────────
     const [depositTab, setDepositTab] = useState<'sol' | 'spl'>('sol')
     const [depositSolAmt, setDepositSolAmt] = useState('')
     const [depositSplToken, setDepositSplToken] = useState<Token>(SPL_TOKENS[0])
     const [depositSplAmt, setDepositSplAmt] = useState('')
 
-    // Withdraw state
+    // ── Withdraw state ───────────────────────────────────────────────
     const [withdrawTab, setWithdrawTab] = useState<'sol' | 'spl'>('sol')
     const [withdrawSolAmt, setWithdrawSolAmt] = useState('')
-    const [withdrawSplToken, setWithdrawSplToken] = useState<Token & { vaultBalance: number } | null>(vaultSplTokens[0] ?? null)
+    const [withdrawSplToken, setWithdrawSplToken] = useState<(Token & { vaultBalance: number }) | null>(
+        vaultSplTokens[0] ?? null
+    )
     const [withdrawSplAmt, setWithdrawSplAmt] = useState('')
 
-    // Custom mint state
+    // ── Custom mint state ────────────────────────────────────────────
     const [useCustomMint, setUseCustomMint] = useState(false)
     const [customMintAddr, setCustomMintAddr] = useState('')
     const [customMintInfo, setCustomMintInfo] = useState<MintInfo | null>(null)
@@ -378,15 +391,21 @@ export default function ManageFundsPage() {
     }
 
     const effectiveSplToken: Token | null = useCustomMint
-        ? customMintInfo?.valid ? { symbol: 'CUSTOM', name: 'Custom Token', mint: customMintAddr.trim(), decimals: customMintInfo.decimals, logo: '' } : null
+        ? customMintInfo?.valid
+            ? { symbol: 'CUSTOM', name: 'Custom Token', mint: customMintAddr.trim(), decimals: customMintInfo.decimals, logo: '' }
+            : null
         : depositSplToken
 
     useEffect(() => {
         if (!withdrawSplToken && vaultSplTokens.length > 0) setWithdrawSplToken(vaultSplTokens[0])
     }, [vaultSplTokens.length])
 
-    const handleWithdrawSplTokenChange = (t: Token & { vaultBalance: number }) => { setWithdrawSplToken(t); setWithdrawSplAmt('') }
+    const handleWithdrawSplTokenChange = (t: Token & { vaultBalance: number }) => {
+        setWithdrawSplToken(t)
+        setWithdrawSplAmt('')
+    }
 
+    // ── USD formatting ───────────────────────────────────────────────
     const debouncedDepositSol = useDebounce(depositSolAmt, 300)
     const debouncedWithdrawSol = useDebounce(withdrawSolAmt, 300)
 
@@ -397,9 +416,43 @@ export default function ManageFundsPage() {
 
     const depositUsd = formatUsd(debouncedDepositSol)
     const withdrawUsd = formatUsd(debouncedWithdrawSol)
-    const withdrawSolInvalid = Number(withdrawSolAmt) > vaultSol && Number(withdrawSolAmt) > 0
-    const withdrawSplInvalid = withdrawSplToken ? Number(withdrawSplAmt) > withdrawSplToken.vaultBalance && Number(withdrawSplAmt) > 0 : false
 
+    // ── Validation ───────────────────────────────────────────────────
+    const withdrawSolInvalid = Number(withdrawSolAmt) > vaultSol && Number(withdrawSolAmt) > 0
+    const withdrawSplInvalid = withdrawSplToken
+        ? Number(withdrawSplAmt) > withdrawSplToken.vaultBalance && Number(withdrawSplAmt) > 0
+        : false
+
+    // ── Handlers ─────────────────────────────────────────────────────
+    const handleDepositSOL = async () => {
+        const ok = await depositSOL(Number(depositSolAmt))
+        if (ok) setDepositSolAmt('')
+    }
+
+    const handleDepositSPL = async () => {
+        if (!effectiveSplToken) return
+        const ok = await depositSPL(
+            new PublicKey(effectiveSplToken.mint),
+            Math.floor(Number(depositSplAmt) * Math.pow(10, effectiveSplToken.decimals))
+        )
+        if (ok) setDepositSplAmt('')
+    }
+
+    const handleWithdrawSOL = async () => {
+        const ok = await withdrawSOL(Number(withdrawSolAmt))
+        if (ok) setWithdrawSolAmt('')
+    }
+
+    const handleWithdrawSPL = async () => {
+        if (!withdrawSplToken) return
+        const ok = await withdrawSPL(
+            new PublicKey(withdrawSplToken.mint),
+            Math.floor(Number(withdrawSplAmt) * Math.pow(10, withdrawSplToken.decimals))
+        )
+        if (ok) setWithdrawSplAmt('')
+    }
+
+    // ── Animation variants ───────────────────────────────────────────
     const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }
     const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: [0.23, 1, 0.32, 1] } } }
 
@@ -524,7 +577,11 @@ export default function ManageFundsPage() {
                                             <SectionLabel>Amount</SectionLabel>
                                             <AmountInput value={depositSolAmt} onChange={setDepositSolAmt} placeholder="0.00" suffix="SOL" tokenLogo={SOL_LOGO} usdValue={depositUsd} />
                                         </div>
-                                        <PrimaryButton disabled={!depositSolAmt || Number(depositSolAmt) <= 0 || depositSolLoading} loading={depositSolLoading} onClick={() => depositSOL(Number(depositSolAmt))}>
+                                        <PrimaryButton
+                                            disabled={!depositSolAmt || Number(depositSolAmt) <= 0 || depositSolLoading}
+                                            loading={depositSolLoading}
+                                            onClick={handleDepositSOL}
+                                        >
                                             <ArrowDownToLine size={15} strokeWidth={2} />
                                             {depositSolLoading ? 'Depositing…' : 'Deposit SOL'}
                                         </PrimaryButton>
@@ -592,8 +649,11 @@ export default function ManageFundsPage() {
                                             )}
                                         </AnimatePresence>
 
-                                        <PrimaryButton disabled={!effectiveSplToken || !depositSplAmt || Number(depositSplAmt) <= 0 || depositSplLoading || (useCustomMint && (!customMintInfo || !customMintInfo.valid))} loading={depositSplLoading}
-                                            onClick={() => { if (!effectiveSplToken) return; depositSPL(new PublicKey(effectiveSplToken.mint), Math.floor(Number(depositSplAmt) * Math.pow(10, effectiveSplToken.decimals))) }}>
+                                        <PrimaryButton
+                                            disabled={!effectiveSplToken || !depositSplAmt || Number(depositSplAmt) <= 0 || depositSplLoading || (useCustomMint && (!customMintInfo || !customMintInfo.valid))}
+                                            loading={depositSplLoading}
+                                            onClick={handleDepositSPL}
+                                        >
                                             <ArrowDownToLine size={15} strokeWidth={2} />
                                             {depositSplLoading ? 'Depositing…' : effectiveSplToken ? `Deposit ${effectiveSplToken.symbol === 'CUSTOM' ? 'Token' : effectiveSplToken.symbol}` : 'Deposit SPL Token'}
                                         </PrimaryButton>
@@ -631,9 +691,27 @@ export default function ManageFundsPage() {
                                         {vaultSol > 0 ? (
                                             <>
                                                 <PercentPills balance={vaultSol} onSelect={setWithdrawSolAmt} activeAmt={withdrawSolAmt} />
-                                                <AmountInput value={withdrawSolAmt} onChange={setWithdrawSolAmt} placeholder="0.00" suffix="SOL" tokenLogo={SOL_LOGO} usdValue={withdrawUsd} max={vaultSol} />
-                                                <PrimaryButton disabled={!withdrawSolAmt || Number(withdrawSolAmt) <= 0 || withdrawSolInvalid}>
-                                                    <ArrowUpFromLine size={15} strokeWidth={2} /> Withdraw SOL
+                                                <AmountInput
+                                                    value={withdrawSolAmt}
+                                                    onChange={setWithdrawSolAmt}
+                                                    placeholder="0.00"
+                                                    suffix="SOL"
+                                                    tokenLogo={SOL_LOGO}
+                                                    usdValue={withdrawUsd}
+                                                    max={vaultSol}
+                                                />
+                                                {withdrawSolInvalid && (
+                                                    <div style={{ fontSize: 12, color: '#dc2626', paddingLeft: 4 }}>
+                                                        Amount exceeds vault balance
+                                                    </div>
+                                                )}
+                                                <PrimaryButton
+                                                    disabled={!withdrawSolAmt || Number(withdrawSolAmt) <= 0 || withdrawSolInvalid || withdrawSolLoading}
+                                                    loading={withdrawSolLoading}
+                                                    onClick={handleWithdrawSOL}
+                                                >
+                                                    <ArrowUpFromLine size={15} strokeWidth={2} />
+                                                    {withdrawSolLoading ? 'Withdrawing…' : 'Withdraw SOL'}
                                                 </PrimaryButton>
                                             </>
                                         ) : (
@@ -647,12 +725,41 @@ export default function ManageFundsPage() {
                                         style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                         {vaultSplTokens.length > 0 && withdrawSplToken ? (
                                             <>
-                                                <BalanceBadge amount={withdrawSplToken.vaultBalance} symbol={withdrawSplToken.symbol} usdValue={vaultAssets.find(a => a.symbol === withdrawSplToken.symbol)?.usdValue} />
-                                                <VaultTokenSelector tokens={vaultSplTokens} selected={withdrawSplToken} onSelect={handleWithdrawSplTokenChange} />
-                                                <PercentPills balance={withdrawSplToken.vaultBalance} onSelect={setWithdrawSplAmt} activeAmt={withdrawSplAmt} />
-                                                <AmountInput value={withdrawSplAmt} onChange={setWithdrawSplAmt} placeholder="0.00" suffix={withdrawSplToken.symbol} tokenLogo={withdrawSplToken.logo} max={withdrawSplToken.vaultBalance} />
-                                                <PrimaryButton disabled={!withdrawSplAmt || Number(withdrawSplAmt) <= 0 || withdrawSplInvalid}>
-                                                    <ArrowUpFromLine size={15} strokeWidth={2} /> Withdraw {withdrawSplToken.symbol}
+                                                <BalanceBadge
+                                                    amount={withdrawSplToken.vaultBalance}
+                                                    symbol={withdrawSplToken.symbol}
+                                                    usdValue={vaultAssets.find(a => a.symbol === withdrawSplToken.symbol)?.usdValue}
+                                                />
+                                                <VaultTokenSelector
+                                                    tokens={vaultSplTokens}
+                                                    selected={withdrawSplToken}
+                                                    onSelect={handleWithdrawSplTokenChange}
+                                                />
+                                                <PercentPills
+                                                    balance={withdrawSplToken.vaultBalance}
+                                                    onSelect={setWithdrawSplAmt}
+                                                    activeAmt={withdrawSplAmt}
+                                                />
+                                                <AmountInput
+                                                    value={withdrawSplAmt}
+                                                    onChange={setWithdrawSplAmt}
+                                                    placeholder="0.00"
+                                                    suffix={withdrawSplToken.symbol}
+                                                    tokenLogo={withdrawSplToken.logo}
+                                                    max={withdrawSplToken.vaultBalance}
+                                                />
+                                                {withdrawSplInvalid && (
+                                                    <div style={{ fontSize: 12, color: '#dc2626', paddingLeft: 4 }}>
+                                                        Amount exceeds vault balance
+                                                    </div>
+                                                )}
+                                                <PrimaryButton
+                                                    disabled={!withdrawSplAmt || Number(withdrawSplAmt) <= 0 || withdrawSplInvalid || withdrawSplLoading}
+                                                    loading={withdrawSplLoading}
+                                                    onClick={handleWithdrawSPL}
+                                                >
+                                                    <ArrowUpFromLine size={15} strokeWidth={2} />
+                                                    {withdrawSplLoading ? 'Withdrawing…' : `Withdraw ${withdrawSplToken.symbol}`}
                                                 </PrimaryButton>
                                             </>
                                         ) : (

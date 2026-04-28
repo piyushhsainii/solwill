@@ -33,11 +33,16 @@ export type Heir = {
   shareBps: number;
   onChain: boolean;
 };
-
+export type LoadingStep =
+  | "wallet" // waiting for wallet to be ready
+  | "chain" // fetching on-chain data
+  | "done"; // all data loaded
 export type Phase = 0 | 1 | 2 | "dashboard";
 
 export interface UseAnchorProviderReturn {
   loading: boolean;
+  initializing: boolean;
+  loadingStep: LoadingStep; // ← add this
   error: Error | null;
   refresh: () => Promise<void>;
   program: Program<DeadWallet> | null;

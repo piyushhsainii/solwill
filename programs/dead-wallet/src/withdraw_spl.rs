@@ -1,6 +1,6 @@
 
 use anchor_lang::{Result, prelude::*};
-use anchor_spl::{  token::{CloseAccount, close_account }, token_interface::{Mint, TokenAccount, TokenInterface, TransferChecked, transfer_checked}};
+use anchor_spl::{  token_interface::{Mint, TokenAccount, TokenInterface, TransferChecked, transfer_checked,CloseAccount, close_account}};
 use crate::{error::Errors, states::{SPLTOKENS, Vault, WillAccount}};
 
 
@@ -42,7 +42,7 @@ pub struct WithdrawSPL<'info> {
 
 }
 
-pub fn withdraw_spl(ctx:Context<WithdrawSPL>, amt:u32) -> Result<()> {
+pub fn withdraw_spl(ctx:Context<WithdrawSPL>, amt:u64) -> Result<()> {
 
     require!(amt > 0, Errors::LowBalance);
     require!(ctx.accounts.will_account.claimed != true, Errors::Will_Already_Claimed);
@@ -61,21 +61,21 @@ pub fn withdraw_spl(ctx:Context<WithdrawSPL>, amt:u32) -> Result<()> {
 
     // transfer the spl tokens back to the will owner
     let cpi_ctx= CpiContext::new_with_signer(
-    ctx.accounts.system_program.to_account_info(),
+    ctx.accounts.token_program.to_account_info(),
     TransferChecked {
-            from:ctx.accounts.vault.to_account_info(),
+            from:ctx.accounts.vault_ata.to_account_info(),
             to:ctx.accounts.owner_ata.to_account_info(),
             authority:ctx.accounts.vault.to_account_info(),
             mint:ctx.accounts.vault_mint.to_account_info()
         },
          signer_seeds
     );
-    transfer_checked(cpi_ctx, amt as u64, ctx.accounts.vault_mint.decimals)?;
+    transfer_checked(cpi_ctx, amt , ctx.accounts.vault_mint.decimals)?;
 
     // update the total sol balance in the will account struct
     let asset = ctx.accounts.will_account.assets.iter_mut().find(|data| data.mint == ctx.accounts.vault_mint.key()).ok_or(Errors::VaultATAInvalid)?;
    
-   let updated_balance = asset.balance.checked_sub(amt as u64).ok_or(Errors::Math_Error)?;
+   let updated_balance = asset.balance.checked_sub(amt ).ok_or(Errors::Math_Error)?;
     asset.balance = updated_balance;
 
     if updated_balance == 0 {

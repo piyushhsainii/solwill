@@ -1,5 +1,5 @@
 {
-  "address": "C4XA8MZn8ue2GATvTrWMCMFdKs92UbAofT64eaEwC527",
+  "address": "ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr",
   "metadata": {
     "name": "dead_wallet",
     "version": "0.1.0",
@@ -1155,7 +1155,7 @@
       "args": [
         {
           "name": "amt",
-          "type": "u32"
+          "type": "u64"
         }
       ]
     }
