@@ -22,7 +22,7 @@ export default function CTA() {
       </p>
       <div className={styles.actions}>
         <motion.a
-          href="https://github.com"
+          href="https://github.com/piyushhsainii/solwill"
           className="btn-primary"
           target="_blank"
           rel="noopener noreferrer"

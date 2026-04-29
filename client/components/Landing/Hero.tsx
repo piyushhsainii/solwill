@@ -50,7 +50,8 @@ export default function Hero() {
             Get Started
           </Link>
           <a
-            href="https://github.com"
+
+            href="https://github.com/piyushhsainii/solwill"
             className={styles.btnSecondary}
             target="_blank"
             rel="noopener noreferrer"
