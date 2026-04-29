@@ -7,10 +7,11 @@ import { useSollWillWallet } from './useSolWillWallet'
 import IDL from '../idl/idl.json'
 import { buildAndSend } from '../utils/helper'
 import { DeadWallet } from '../idl/idl'
+import { useAnchor } from '@/app/(protected)/layout'
 
 const RPC_URL = clusterApiUrl('devnet')
 
-const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 const WILL_SEED = Buffer.from([119, 105, 108, 108])
 const HEIR_SEED = Buffer.from([104, 101, 105, 114])
 
@@ -19,6 +20,7 @@ export function useUpdateHeir() {
     const [error, setError] = useState<Error | null>(null)
     const updateHeir = useWillStore((s) => s.updateHeir)
     const setTxPending = useWillStore((s) => s.setTxPending)
+    const { refresh } = useAnchor()
 
     const { raw, ready, loading, connected, publicKey } = useSollWillWallet()
 
@@ -80,58 +82,11 @@ export function useUpdateHeir() {
                         newHeirAddress: newHeirPk,
                     })
                     .instruction()
-                // const { blockhash, lastValidBlockHeight } =
-                //     await connection.getLatestBlockhash('confirmed')
 
-                // // Build transaction
-                // const tx = new Transaction({
-                //     feePayer: ownerPk,
-                //     blockhash,
-                //     lastValidBlockHeight,
-                // }).add(ix)
-
-                // // Serialize
-                // let serializedTx: Uint8Array
-                // try {
-                //     serializedTx = new Uint8Array(
-                //         tx.serialize({ requireAllSignatures: false, verifySignatures: false })
-                //     )
-                //     console.log('[checkinWill] serialized tx byteLength:', serializedTx.byteLength)
-                // } catch (serErr) {
-                //     console.error('[checkinWill] serialization failed:', serErr)
-                //     throw serErr
-                // }
-
-                // // Send to Phantom
-                // console.log('[checkinWill] sending to Phantom for signing...')
-                // let signature: string
-                // try {
-                //     const result = await raw.signAndSendTransaction({
-                //         transaction: serializedTx,
-                //         chain: 'solana:devnet',
-                //     })
-                //     signature = bs58.encode(result.signature)
-                //     console.log('[checkinWill] Phantom returned signature:', signature)
-                // } catch (signErr) {
-                //     console.error('[checkinWill] Phantom rejected or errored:', signErr)
-                //     console.error('[checkinWill] signErr name:', (signErr as any)?.name)
-                //     console.error('[checkinWill] signErr message:', (signErr as any)?.message)
-                //     console.error('[checkinWill] signErr code:', (signErr as any)?.code)
-                //     throw signErr
-                // }
-
-                // // Confirm
-                // console.log('[checkinWill] confirming transaction...')
-                // await connection.confirmTransaction(
-                //     { signature, blockhash, lastValidBlockHeight },
-                //     'confirmed'
-                // )
-                // console.log('[checkinWill] confirmed!')
                 const sig = await buildAndSend(raw, connection, ix, ownerPk)
                 console.log('[updateHeir] confirmed:', sig)
                 // 
-                // Mirror in Zustand — update both address and bps
-                updateHeir(storeId, { walletAddress: newWalletAddress, shareBps: updatedBps })
+                await refresh()
 
                 toast.success('Heir updated!', { id: toastId })
                 return true

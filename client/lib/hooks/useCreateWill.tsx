@@ -24,7 +24,7 @@ import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
 const PROGRAM_ID = new PublicKey(
-    'ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr'
+    '55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz'
 )
 
 const WILL_SEED = Buffer.from('will')

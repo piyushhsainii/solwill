@@ -13,7 +13,7 @@ import { useSollWillWallet } from './useSolWillWallet'
 import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
-const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 const WILL_SEED = Buffer.from('will')
 const HEIR_SEED = Buffer.from('heir')
 const RPC_URL = clusterApiUrl('devnet')
@@ -131,8 +131,6 @@ export function useAddHeir() {
                 }
 
                 console.log('[addHeir] sending to Phantom...')
-                const logs = await connection.simulateTransaction(tx)
-                console.log(logs)
 
                 const result = await raw.signAndSendTransaction({
                     transaction: serializedTx,

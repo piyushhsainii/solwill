@@ -22,7 +22,7 @@ import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
-const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 const WILL_SEED = Buffer.from('will')
 const RPC_URL = clusterApiUrl('devnet')
 

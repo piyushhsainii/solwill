@@ -18,8 +18,9 @@ import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
+import { getTokenProgramForMint } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const RPC_URL = clusterApiUrl('devnet')
@@ -113,8 +114,15 @@ export function useWithdrawSOL() {
                     })
                     .instruction()
 
-                const sig = await buildAndSend(raw, connection, ix, ownerPk)
-                console.log('[withdrawSOL] confirmed:', sig)
+                const tx = new Transaction({
+                    blockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
+                    feePayer: ownerPk,
+                    lastValidBlockHeight: (await connection.getLatestBlockhash('confirmed')).lastValidBlockHeight,
+                }).add(ix)
+                const logs = await connection.simulateTransaction(tx)
+                console.log(logs)
+                // const sig = await buildAndSend(raw, connection, ix, ownerPk)
+                // console.log('[withdrawSOL] confirmed:', sig)
 
                 toast.success(`${amountSol} SOL withdrawn!`, { id: toastId })
                 await refresh()
@@ -156,11 +164,6 @@ export function useWithdrawSPL() {
                 if (!ready || walletLoading) { toast.error('Wallet still loading...'); return false }
                 if (!connected || !publicKey || !raw) { toast.error('Please connect wallet.'); return false }
                 if (amountRaw <= 0) { toast.error('Amount must be greater than 0'); return false }
-                if (amountRaw > 4_294_967_295) {
-                    toast.error('Amount exceeds u32 max')
-                    return false
-                }
-
                 const connection = new Connection(RPC_URL, 'confirmed')
                 const provider = new AnchorProvider(connection, raw as any, { commitment: 'confirmed' })
                 const program = new Program<DeadWallet>(IDL as Idl, provider)
@@ -178,7 +181,14 @@ export function useWithdrawSPL() {
                 // ownerAta: token account for owner
                 const ownerAta = getAssociatedTokenAddressSync(mint, ownerPk)
                 // vaultAta: token account owned by vault PDA (allowOwnerOffCurve = true)
-                const vaultAta = getAssociatedTokenAddressSync(mint, vaultPda, true)
+
+                const mintInfo = await connection.getAccountInfo(mint)
+                if (!mintInfo) {
+                    console.warn(`[withdraw SPL] mint not found on-chain:`, mint.toBase58())
+                    return false
+                }
+                const tokenProgram = await getTokenProgramForMint(connection, mint)
+                const vaultAta = getAssociatedTokenAddressSync(mint, vaultPda, true, tokenProgram)
 
                 setLoading(true)
                 setTxPending(true)
@@ -193,6 +203,7 @@ export function useWithdrawSPL() {
 
                 const toastId = toast.loading('Withdrawing token...')
 
+
                 const ix = await program.methods
                     .withdrawSplToken(amountRaw)
                     .accountsPartial({
@@ -202,6 +213,7 @@ export function useWithdrawSPL() {
                         vault: vaultPda,
                         vaultMint: mint,
                         vaultAta: vaultAta,
+                        tokenProgram: tokenProgram
                     })
                     .instruction()
 

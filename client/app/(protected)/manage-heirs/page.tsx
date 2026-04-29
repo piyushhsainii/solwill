@@ -381,7 +381,7 @@ export default function ManageHeirsPage() {
                             placeholder="BPS (e.g. 5000 = 50%)"
                             type="number"
                             min={1}
-                            max={100}
+                            max={10000}
                             value={draftBps}
                             onChange={(e) => setDraftBps(e.target.value)}
                             style={inputStyle}
@@ -486,7 +486,7 @@ export default function ManageHeirsPage() {
                                                 <input
                                                     type="number"
                                                     min={1}
-                                                    max={100}
+                                                    max={10000}
                                                     value={draft.shareBps}
                                                     onChange={(e) => handleBpsChange(heir.id, e.target.value)}
                                                     style={{

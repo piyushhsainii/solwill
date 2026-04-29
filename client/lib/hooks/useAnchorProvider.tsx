@@ -18,7 +18,7 @@ import { DeadWallet } from '../idl/idl'
 import { useSollWillWallet } from './useSolWillWallet'
 import { LoadingStep, UseAnchorProviderReturn } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? 'https://api.devnet.solana.com'
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
@@ -79,38 +79,6 @@ function mapHeirs(heirAccounts: any[]) {
     }))
 }
 
-async function fetchUsdPrices(mints: string[]): Promise<Record<string, number>> {
-    const ids = [SOL_MINT, ...mints.filter((m) => m !== SOL_MINT)].join(',')
-    try {
-        const res = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`)
-        const json = await res.json()
-        const out: Record<string, number> = {}
-        for (const [mint, data] of Object.entries(json.data as Record<string, any>)) {
-            out[mint] = parseFloat((data as any)?.price ?? '0')
-        }
-        return out
-    } catch {
-        return {}
-    }
-}
-
-async function resolveDecimals(conn: Connection, mint: PublicKey): Promise<number> {
-    const key = mint.toBase58()
-    if (decimalsCache[key] !== undefined) return decimalsCache[key]
-    const meta = TOKEN_META[key]
-    if (meta) {
-        decimalsCache[key] = meta.decimals
-        return meta.decimals
-    }
-    try {
-        const info = await getMint(conn, mint)
-        decimalsCache[key] = info.decimals
-        return info.decimals
-    } catch {
-        decimalsCache[key] = 6
-        return 6
-    }
-}
 
 const storeActions = () => useWillStore.getState()
 
@@ -259,9 +227,24 @@ export function useAnchorProvider(): UseAnchorProviderReturn {
             console.log('[runRefresh] raw heir accounts:', heirAccounts)
 
             const mapped = mapHeirs(heirAccounts)
-            storeActions().setHeirs(mapped)
-            setHeirs(mapped)
+            const myHeirs = heirAccounts.filter((data) => {
+                const [expectedPda] = PublicKey.findProgramAddressSync(
+                    [HEIR_SEED, data.account.walletAddress.toBuffer(), willPda.toBuffer()],
+                    PROGRAM_ID
+                )
+                return expectedPda.equals(data.publicKey)
 
+            });
+            const heirs = myHeirs.map((data) => {
+                return {
+                    id: data.publicKey.toBase58(),
+                    onChain: true,
+                    shareBps: data.account.bps,
+                    walletAddress: data.account.walletAddress.toBase58()
+                }
+            })
+
+            storeActions().setHeirs(heirs)
             console.log('[runRefresh] done — assets:', allAssets.length, 'heirs:', mapped.length)
 
         } catch (err) {

@@ -18,7 +18,7 @@ export function useDissolveWill() {
     const { raw: wallet } = useSollWillWallet()
     const { refresh } = useAnchor()
     const setTxPending = useWillStore((s) => s.setTxPending)
-    const PROGRAM_ID = new PublicKey('ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr')
+    const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
 
     const HEIR_SEED = Buffer.from('heir')
 

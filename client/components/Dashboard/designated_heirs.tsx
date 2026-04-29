@@ -114,7 +114,7 @@ const DesignatedHeirs = ({
                             ? `${address.slice(0, 4)}...${address.slice(-4)}`
                             : 'Unknown'
                         const bps = heir.shareBps || 0
-                        const percentage = bps
+                        const percentage = bps / 100
                         const color = '#000000'
                         const ringSize = mobile ? 72 : RING_SIZE
 

@@ -45,7 +45,7 @@ pub use withdraw_spl::*;
 pub use error::*;
 
 
-declare_id!("ApK5v1ibJDetC9xiHywNGiWPN2hMu7zm4RQxGaiFsMvr");
+declare_id!("55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz");
 
 #[program]
 pub mod dead_wallet {
@@ -95,7 +95,7 @@ pub mod dead_wallet {
         update_will::update_will(ctx, interval)?;
         Ok(())
     }
-    pub fn withdraw_sol_token(ctx: Context<WithdrawSol>, amt:u32) -> Result<()> {
+    pub fn withdraw_sol_token(ctx: Context<WithdrawSol>, amt:u64) -> Result<()> {
         withdraw_sol::withdraw_sol(ctx, amt)?;
         Ok(())
     }
