@@ -8,6 +8,7 @@ import { AlertTriangle, Clock, Trash2, ShieldOff, Info } from 'lucide-react'
 import { DestroyConfirmModal } from '@/components/ui/destroy-confirm-modal'
 import { Section } from '@/components/ui/section-wrapper'
 import { TriggeredBanner } from '@/components/ui/triggered-banner'
+import WillTriggeredBanner from '@/components/ui/willTrigerredBanner'
 
 const INTERVAL_PRESETS = [
     { label: '30 days', days: 30 },
@@ -28,9 +29,8 @@ export default function WillSettings() {
     const [customDays, setCustomDays] = useState('')
     const [showDestroyModal, setShowDestroyModal] = useState(false)
 
-    const isTriggered = willAccount?.status === 'Triggered'
-    const isGrace = willAccount?.status === 'Grace Period'
-    const isLocked = isTriggered || isGrace
+    const isTriggered = willAccount?.status === 'claimed'
+    const isLocked = isTriggered
     const currentIntervalDays = willAccount ? Math.round(willAccount.interval / 86400) : null
 
     /* ── Effective days from preset or custom ────────────────────── */
@@ -100,6 +100,13 @@ export default function WillSettings() {
         )
     }
 
+    if (willAccount?.status == "claimed") {
+        return <div className='w-full flex justify-center items-center min-h-screen'>
+            <WillTriggeredBanner />
+        </div>
+
+    }
+
     return (
         <>
             {showDestroyModal && (
@@ -149,9 +156,9 @@ export default function WillSettings() {
                             letterSpacing: '0.05em',
                             padding: '3px 10px',
                             borderRadius: 999,
-                            background: isTriggered ? '#fef2f2' : isGrace ? '#fffbeb' : '#f0fdf4',
-                            color: isTriggered ? '#ef4444' : isGrace ? '#d97706' : '#16a34a',
-                            border: `1px solid ${isTriggered ? '#fecaca' : isGrace ? '#fde68a' : '#bbf7d0'}`,
+                            background: isTriggered ? '#fef2f2' : '#f0fdf4',
+                            color: isTriggered ? '#ef4444' : '#16a34a',
+                            border: `1px solid ${isTriggered ? '#fecaca' : '#bbf7d0'}`,
                         }}>
                             {willAccount.status.toUpperCase()}
                         </span>
