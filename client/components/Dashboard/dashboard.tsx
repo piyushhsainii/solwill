@@ -54,53 +54,37 @@ const Dashboard = ({
         <>
             {/* Responsive grid styles injected via a style tag */}
             <style>{`
-                .dashboard-grid {
-                    display: grid;
-                    gap: 16px;
-                    width: 100%;
-                    box-sizing: border-box;
-                }
+    .dashboard-grid {
+        display: grid;
+        gap: 16px;
+        width: 100%;
+        box-sizing: border-box;
+    }
 
-                /* Mobile: single column, all items full width */
-                @media (max-width: 767px) {
-                    .dashboard-grid {
-                        grid-template-columns: 1fr;
-                    }
-                    .dashboard-grid > * {
-                        grid-column: span 1 !important;
-                        min-width: 0;
-                        width: 100%;
-                    }
-                }
+    /* Small screens (including ~893px with sidebar): stack everything */
+    @media (max-width: 1199px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+        .dashboard-grid > * {
+            grid-column: span 1 !important;
+            min-width: 0;
+            width: 100%;
+        }
+    }
 
-                /* Tablet: 2 columns */
-                @media (min-width: 768px) and (max-width: 1023px) {
-                    .dashboard-grid {
-                        grid-template-columns: repeat(2, 1fr);
-                    }
-                    .col-span-5,
-                    .col-span-7 {
-                        grid-column: span 1 !important;
-                    }
-                    .col-span-3 {
-                        grid-column: span 1 !important;
-                    }
-                    .col-span-9 {
-                        grid-column: span 2 !important;
-                    }
-                }
-
-                /* Desktop: 12 columns */
-                @media (min-width: 1024px) {
-                    .dashboard-grid {
-                        grid-template-columns: repeat(12, 1fr);
-                    }
-                    .col-span-5  { grid-column: span 5; }
-                    .col-span-7  { grid-column: span 7; }
-                    .col-span-3  { grid-column: span 3; }
-                    .col-span-9  { grid-column: span 9; }
-                }
-            `}</style>
+    /* Desktop: full 12-column grid */
+    @media (min-width: 1200px) {
+        .dashboard-grid {
+            grid-template-columns: repeat(12, 1fr);
+        }
+        .col-span-5  { grid-column: span 5; }
+        .col-span-7  { grid-column: span 7; }
+        .col-span-3  { grid-column: span 3; }
+        .col-span-9  { grid-column: span 9; }
+        .col-span-12 { grid-column: span 12; }
+    }
+`}</style>
 
             <motion.div
                 variants={stagger}
@@ -120,7 +104,7 @@ const Dashboard = ({
                             padding: '24px',
                             height: '100%',
                             boxSizing: 'border-box',
-                            overflow: 'hidden',
+                            overflow: 'visible',  // was 'hidden'
                             position: 'relative',
                             boxShadow: '0 2px 12px rgba(36,43,53,0.06)',
                             transition: 'box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease',

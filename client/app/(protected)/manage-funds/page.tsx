@@ -10,6 +10,7 @@ import { useWillStore } from '@/app/store/useWillStore'
 import { SOL_LOGO, SPL_TOKENS, Token, TOKEN_LOGO_MAP, TOKENS } from '@/lib/utils/helper'
 import AccordionCard from '@/components/ui/accordion-card'
 import { useWithdrawSOL, useWithdrawSPL } from '@/lib/hooks/useWithdraw'
+import WillTriggeredBanner from '@/components/ui/willTrigerredBanner'
 
 const RPC_URL = 'https://api.devnet.solana.com'
 
@@ -316,9 +317,6 @@ function PrimaryButton({ children, onClick, disabled, loading }: { children: Rea
     )
 }
 
-function Divider() {
-    return <div style={{ height: 1, background: '#F0F0EB', margin: '20px 0' }} />
-}
 
 export default function ManageFundsPage() {
     const solPrice = useSolPrice()
@@ -333,6 +331,7 @@ export default function ManageFundsPage() {
 
     // ── Store ────────────────────────────────────────────────────────
     const vaultAccount = useWillStore(s => s.vaultAccount)
+    const willAccount = useWillStore(s => s.willAccount)
     const vaultSol = vaultAccount?.sol ?? 0
     const vaultAssets = vaultAccount?.assets ?? []
 
@@ -384,6 +383,7 @@ export default function ManageFundsPage() {
         })
         return () => { cancelled = true }
     }, [debouncedCustomMint, useCustomMint])
+
 
     const handleToggleCustomMint = () => {
         setUseCustomMint(v => { if (v) { setCustomMintAddr(''); setCustomMintInfo(null) } return !v })
@@ -455,6 +455,14 @@ export default function ManageFundsPage() {
     // ── Animation variants ───────────────────────────────────────────
     const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }
     const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: [0.23, 1, 0.32, 1] } } }
+
+    if (willAccount?.status == "claimed") {
+        return <div className='w-full flex justify-center items-center min-h-screen'>
+            <WillTriggeredBanner />
+        </div>
+
+    }
+    // console.log(willAccount?.status)
 
     return (
         <>

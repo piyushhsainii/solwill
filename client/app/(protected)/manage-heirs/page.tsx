@@ -9,6 +9,7 @@ import { useUpdateHeir } from '@/lib/hooks/useUpdateHeir'
 import { useRemoveHeir } from '@/lib/hooks/useRemoveHeir'
 import { useAddHeir } from '@/lib/hooks/useAddHeir'
 import DesignatedHeirs from '@/components/Dashboard/designated_heirs'
+import WillTriggeredBanner from '@/components/ui/willTrigerredBanner'
 
 // ── Confirm dialog ────────────────────────────────────────────────────────────
 type DialogState =
@@ -145,7 +146,7 @@ function truncateAddr(v: string | undefined) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function ManageHeirsPage() {
     const heirs = useWillStore((s) => s.heirs)
-
+    const willAccount = useWillStore((s) => s.willAccount)
     const { executeUpdateHeir, loading: updateLoading } = useUpdateHeir()
     const { executeRemoveHeir, loading: removeLoading, removingId } = useRemoveHeir()
     const { addHeir, loading: addLoading } = useAddHeir()
@@ -319,6 +320,13 @@ export default function ManageHeirsPage() {
     }
 
     const anyLoading = addLoading || updateLoading || removeLoading || dialogLoading
+
+    if (willAccount?.status == "claimed") {
+        return <div className='w-full flex justify-center items-center min-h-screen'>
+            <WillTriggeredBanner />
+        </div>
+
+    }
 
     return (
         <>

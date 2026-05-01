@@ -194,12 +194,15 @@ export default function ConnectPage() {
 
     const { ready, authenticated } = usePrivy()
     const { wallets } = useWallets()
-
+    console.log(ready)
+    console.log(authenticated)
+    console.log(wallets)
     const [connecting, setConnecting] = useState(false)
     const [done, setDone] = useState(false)
 
     const login = useLogin({
         onComplete: async ({ user }) => {
+            console.log(`user hook`, user)
             const address = user?.wallet?.address || wallets?.[0]?.address || ''
             if (!address) {
                 setConnecting(false)
@@ -215,6 +218,7 @@ export default function ConnectPage() {
             setConnecting(false)
             toast.error('Connection failed.')
         },
+
     })
 
     useEffect(() => {
@@ -228,6 +232,15 @@ export default function ConnectPage() {
         if (!ready || connecting) return
         try {
             setConnecting(true)
+
+            if (window.solana) {
+                await window.solana.disconnect()
+                // Force clear the cached public key Privy reads
+                // @ts-ignore
+                window.solana._publicKey = null
+                await new Promise(res => setTimeout(res, 300))
+            }
+
             await login.login({ loginMethods: ['wallet'], walletChainType: 'solana-only' })
         } catch {
             setConnecting(false)

@@ -11,7 +11,7 @@ import {
     Coins,
 } from 'lucide-react'
 import { useWillStore } from '@/app/store/useWillStore'
-import { useLogout } from '@privy-io/react-auth'
+import { getAccessToken, useLogout, usePrivy } from '@privy-io/react-auth'
 import { motion } from 'framer-motion'
 
 const NAV_ITEMS = [
@@ -24,12 +24,13 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
     const pathname = usePathname()
-    const { publicKey, connected } = useWillStore()
-    const { logout } = useLogout()
-
+    const { publicKey, connected, setConnected } = useWillStore()
+    const { logout } = usePrivy()
     const shortAddr = publicKey
         ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`
         : '0x00...0000'
+
+
 
     return (
         <>
@@ -117,7 +118,11 @@ export default function Sidebar() {
                         </div>
                     </div>
                     <button
-                        onClick={() => logout()}
+                        onClick={async () => {
+                            await logout(),
+                                window.location.href = '/connect'
+                            setConnected(false)
+                        }}
                         title="Disconnect"
                         style={{
                             background: '#FFFFFF', border: '1px solid #E4E4DF', cursor: 'pointer',

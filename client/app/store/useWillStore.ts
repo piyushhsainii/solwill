@@ -11,6 +11,7 @@ export type Heir = {
 };
 export type Asset = {
   symbol: string;
+
   mint?: string;
   amount: number;
   usdPrice: number;
@@ -19,7 +20,7 @@ export type Asset = {
   decimals: number;
 };
 
-type WillStatus = "Active" | "Grace Period" | "Triggered" | "Paused";
+type WillStatus = "active" | "claimed";
 
 export type WillAccount = {
   lastCheckin: number;
@@ -126,7 +127,7 @@ export const useWillStore = create<State>((set, get) => ({
           lastCheckin: ts,
           interval,
           nextCheckin: ts + interval,
-          status: "Active",
+          status: "active",
         },
       };
     }),
@@ -140,7 +141,7 @@ export const useWillStore = create<State>((set, get) => ({
           ...state.willAccount,
           lastCheckin: ts,
           nextCheckin: ts + state.willAccount.interval,
-          status: "Active",
+          status: "active",
         },
       };
     }),
@@ -150,9 +151,8 @@ export const useWillStore = create<State>((set, get) => ({
       if (!state.willAccount) return state;
       const ts = now();
       const lateBy = ts - state.willAccount.nextCheckin;
-      let status: WillStatus = "Active";
-      if (lateBy > 0 && lateBy <= 3 * 24 * 60 * 60) status = "Grace Period";
-      if (lateBy > 3 * 24 * 60 * 60) status = "Triggered";
+      let status: WillStatus = "active";
+      if (lateBy > 3 * 24 * 60 * 60) status = "claimed";
       return { willAccount: { ...state.willAccount, status } };
     }),
 

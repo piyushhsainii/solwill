@@ -30,12 +30,17 @@ function ProtectionStatusCard({
     const startRef = useRef<number>(0)
     const rafRef = useRef<number>(0)
 
+    // Ripple canvas refs
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const ripplesRef = useRef<{ r: number; maxR: number; opacity: number; born: number }[]>([])
+    const rippleRafRef = useRef<number>(0)
+    const rippleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000)
         return () => clearInterval(timer)
     }, [])
 
-    // After tx resolves → flash success state for 2.5s then revert
     useEffect(() => {
         if (!txPending && fired) {
             setShowSuccess(true)
@@ -50,7 +55,6 @@ function ProtectionStatusCard({
     }, [txPending, fired])
 
     const tracker = useMemo(() => {
-        // Fix: use lastCheckin !== undefined instead of !lastCheckin (0 is falsy)
         if (lastCheckin === undefined || !intervalSeconds) {
             return {
                 progress: 0,
@@ -93,8 +97,76 @@ function ProtectionStatusCard({
         return { progress, secs, mins, hours, days, totalRemaining: totalSecs, label, color, bg, hasData: true }
     }, [now, lastCheckin, intervalSeconds])
 
+    const willTriggered = tracker.hasData && tracker.totalRemaining <= 0
+
+    // ── Ripple canvas animation ──
+    useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        const W = 320, H = 320
+        const CX = W / 2  // 160
+        const CY = H / 2  // 160
+        const BASE_R = 72
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const rippleColor = willTriggered ? [220, 38, 38] : [34, 197, 94]
+
+        function spawnRipple() {
+            ripplesRef.current.push({ r: BASE_R, maxR: BASE_R + 68, opacity: 0.5, born: performance.now() })
+        }
+
+        function draw(now: number) {
+            ctx!.clearRect(0, 0, W, H)
+            const [r, g, b] = rippleColor
+            ripplesRef.current = ripplesRef.current.filter(rp => {
+                const t = Math.min((now - rp.born) / 2000, 1)
+                if (t >= 1) return false
+                // cubic ease-out
+                const eased = 1 - Math.pow(1 - t, 3)
+                const radius = rp.r + (rp.maxR - rp.r) * eased
+                const opacity = rp.opacity * (1 - t)
+
+                // filled area with reducing opacity
+                ctx!.beginPath()
+                ctx!.arc(CX, CY, radius, 0, Math.PI * 2)
+                ctx!.fillStyle = `rgba(${r},${g},${b},${opacity * 0.13})`
+                ctx!.fill()
+
+                // stroke ring
+                ctx!.beginPath()
+                ctx!.arc(CX, CY, radius, 0, Math.PI * 2)
+                ctx!.strokeStyle = `rgba(${r},${g},${b},${opacity})`
+                ctx!.lineWidth = 1.5
+                ctx!.stroke()
+
+                return true
+            })
+            rippleRafRef.current = requestAnimationFrame(draw)
+        }
+
+        // Don't show ripples while holding or showing success
+        if (isHolding || txPending) {
+            cancelAnimationFrame(rippleRafRef.current)
+            if (rippleIntervalRef.current) clearInterval(rippleIntervalRef.current)
+            ctx.clearRect(0, 0, W, H)
+            return
+        }
+
+        ripplesRef.current = []
+        spawnRipple()
+        rippleIntervalRef.current = setInterval(spawnRipple, 1100)
+        rippleRafRef.current = requestAnimationFrame(draw)
+
+        return () => {
+            cancelAnimationFrame(rippleRafRef.current)
+            if (rippleIntervalRef.current) clearInterval(rippleIntervalRef.current)
+        }
+    }, [willTriggered, isHolding, txPending])
+
     const startHold = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-        if (txPending || fired || showSuccess) return
+        if (txPending || fired || showSuccess || willTriggered) return
         e.preventDefault()
         setIsHolding(true)
         startRef.current = Date.now()
@@ -113,7 +185,7 @@ function ProtectionStatusCard({
             }
         }
         rafRef.current = requestAnimationFrame(tick)
-    }, [txPending, fired, showSuccess, checkinWill])
+    }, [txPending, fired, showSuccess, willTriggered, checkinWill])
 
     const cancelHold = useCallback(() => {
         if (!isHolding) return
@@ -132,12 +204,14 @@ function ProtectionStatusCard({
             ? '#16A34A'
             : isHolding
                 ? '#1A1A18'
-                : '#EEEEE9'
+                : willTriggered
+                    ? '#FEF2F2'
+                    : '#EEEEE9'
 
     return (
         <div style={{
-            background: '#FFFFFF',
-            border: '1px solid #E4E4DF',
+            background: willTriggered ? '#FFF8F8' : '#FFFFFF',
+            border: `1px solid ${willTriggered ? '#FECACA' : '#E4E4DF'}`,
             borderRadius: '24px',
             padding: '28px 24px 24px',
             display: 'flex',
@@ -146,46 +220,93 @@ function ProtectionStatusCard({
             fontWeight: 300,
             letterSpacing: '-0.02em',
             userSelect: 'none',
+            transition: 'background 0.4s ease, border-color 0.4s ease',
         }}>
+
+            {/* Will triggered banner */}
+            <AnimatePresence>
+                {willTriggered && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8, height: 0, marginBottom: 0 }}
+                        animate={{ opacity: 1, y: 0, height: 'auto', marginBottom: 16 }}
+                        exit={{ opacity: 0, y: -8, height: 0, marginBottom: 0 }}
+                        transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                        style={{
+                            background: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            borderRadius: '14px',
+                            padding: '12px 14px',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 10,
+                            overflow: 'hidden',
+                        }}
+                    >
+                        <motion.div
+                            animate={{ scale: [1, 1.2, 1] }}
+                            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                            style={{ flexShrink: 0, marginTop: 1 }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" fill="#EF4444" />
+                                <path d="M12 7v5M12 16h.01" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                            </svg>
+                        </motion.div>
+                        <div>
+                            <div style={{ fontSize: '13px', fontWeight: 500, color: '#B91C1C', lineHeight: 1.3 }}>
+                                Will has been triggered
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#DC2626', marginTop: 2, lineHeight: 1.5, fontWeight: 300 }}>
+                                Recovery protocol is now executing. Beneficiaries have been notified.
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <div style={{
                 fontSize: '10px', textTransform: 'uppercase',
                 color: '#8A8A82', letterSpacing: '0.12em',
                 marginBottom: '10px', fontWeight: 300,
             }}>
-                Active Protection Status
+                {willTriggered ? 'Recovery Protocol Active' : 'Active Protection Status'}
             </div>
 
-            <h2 style={{ fontSize: '26px', color: '#1A1A18', margin: '0 0 10px', fontWeight: 300, letterSpacing: '-0.03em' }}>
-                Estate Secured
+            <h2 style={{
+                fontSize: '26px',
+                color: willTriggered ? '#B91C1C' : '#1A1A18',
+                margin: '0 0 10px',
+                fontWeight: 300,
+                letterSpacing: '-0.03em',
+                transition: 'color 0.4s ease',
+            }}>
+                {willTriggered ? 'Will Triggered' : 'Estate Secured'}
             </h2>
 
             <p style={{ fontSize: '14px', lineHeight: 1.7, color: '#555550', margin: '0 0 24px', fontWeight: 300, letterSpacing: '-0.01em' }}>
-                Your digital legacy remains protected. Regular identity
-                verification prevents automatic recovery execution.
+                {willTriggered
+                    ? 'The recovery protocol is now executing. Your designated beneficiaries have been notified and the estate transfer is underway.'
+                    : 'Your digital legacy remains protected. Regular identity verification prevents automatic recovery execution.'
+                }
             </p>
 
             {/* Hold Button */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px', gap: 10 }}>
-                <div style={{ position: 'relative', width: 160, height: 160 }}>
+                <div style={{ position: 'relative', width: 160, height: 160, overflow: "visible" }}>
 
-                    {/* Ambient pulse rings */}
-                    {!isHolding && !txPending && !showSuccess && (
-                        <>
-                            {[0, 1, 2].map(i => (
-                                <motion.div
-                                    key={i}
-                                    animate={{ scale: [1, 1.55 + i * 0.22], opacity: [0.45 - i * 0.1, 0] }}
-                                    transition={{ repeat: Infinity, duration: 2.2, delay: i * 0.55, ease: 'easeOut' }}
-                                    style={{
-                                        position: 'absolute', inset: 0, borderRadius: '50%',
-                                        border: `1.5px solid ${tracker.color}`, pointerEvents: 'none',
-                                    }}
-                                />
-                            ))}
-                        </>
-                    )}
-
+                    {/* Ripple canvas — replaces motion.div pulse rings */}
+                    <canvas
+                        ref={canvasRef}
+                        width={320}
+                        height={320}
+                        style={{
+                            position: 'absolute',
+                            top: -80,
+                            left: -80,
+                            pointerEvents: 'none',
+                        }}
+                    />
                     {/* Success ripple rings */}
                     {showSuccess && !txPending && (
                         <>
@@ -229,7 +350,7 @@ function ProtectionStatusCard({
                         onMouseLeave={cancelHold}
                         onTouchStart={startHold}
                         onTouchEnd={cancelHold}
-                        disabled={txPending || showSuccess}
+                        disabled={txPending || showSuccess || willTriggered}
                         animate={{
                             scale: isHolding ? 0.93 : checkinAnim ? [1, 0.95, 1.06, 1] : 1,
                             backgroundColor: buttonBg,
@@ -240,8 +361,8 @@ function ProtectionStatusCard({
                         }}
                         style={{
                             position: 'absolute', inset: 8, borderRadius: '50%',
-                            border: 'none',
-                            cursor: (txPending || showSuccess) ? 'default' : 'pointer',
+                            border: willTriggered ? '1px solid #FECACA' : 'none',
+                            cursor: (txPending || showSuccess || willTriggered) ? 'default' : 'pointer',
                             display: 'flex', flexDirection: 'column',
                             alignItems: 'center', justifyContent: 'center', gap: '10px',
                             fontFamily: 'inherit', outline: 'none',
@@ -250,7 +371,9 @@ function ProtectionStatusCard({
                                 ? '0 0 0 0px transparent, 0 12px 36px rgba(36,43,53,0.18)'
                                 : showSuccess
                                     ? '0 0 0 8px rgba(22,163,74,0.12), 0 0 0 18px rgba(22,163,74,0.06), 0 8px 30px rgba(22,163,74,0.15)'
-                                    : '0 0 0 8px rgba(238,238,233,0.85), 0 0 0 18px rgba(247,247,244,0.7), 0 8px 30px rgba(36,43,53,0.07)',
+                                    : willTriggered
+                                        ? '0 0 0 8px rgba(220,38,38,0.08), 0 0 0 18px rgba(220,38,38,0.04)'
+                                        : '0 0 0 8px rgba(238,238,233,0.85), 0 0 0 18px rgba(247,247,244,0.7), 0 8px 30px rgba(36,43,53,0.07)',
                             transition: 'box-shadow 0.4s ease',
                         }}
                     >
@@ -277,7 +400,6 @@ function ProtectionStatusCard({
                                     transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}
                                 >
-                                    {/* Checkmark SVG */}
                                     <motion.svg
                                         width={48} height={48} viewBox="0 0 48 48" fill="none"
                                         initial={{ pathLength: 0 }}
@@ -300,6 +422,26 @@ function ProtectionStatusCard({
                                         textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'inherit',
                                     }}>
                                         Verified
+                                    </span>
+                                </motion.div>
+                            ) : willTriggered ? (
+                                <motion.div
+                                    key="triggered"
+                                    initial={{ opacity: 0, scale: 0.85 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.85 }}
+                                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}
+                                >
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                                        <circle cx="12" cy="12" r="10" fill="#EF4444" />
+                                        <path d="M12 7v5M12 16h.01" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                                    </svg>
+                                    <span style={{
+                                        fontSize: '10px', color: '#DC2626',
+                                        textTransform: 'uppercase', letterSpacing: '0.12em',
+                                        fontWeight: 300, fontFamily: 'inherit',
+                                    }}>
+                                        Triggered
                                     </span>
                                 </motion.div>
                             ) : (
@@ -360,7 +502,7 @@ function ProtectionStatusCard({
                 </AnimatePresence>
             </div>
 
-            {/* ── Countdown display ── */}
+            {/* Countdown display */}
             <div style={{
                 background: tracker.bg,
                 border: `1px solid ${tracker.color}30`,
@@ -380,7 +522,6 @@ function ProtectionStatusCard({
                     </span>
                 </div>
 
-                {/* Progress bar */}
                 <div style={{
                     height: '5px', borderRadius: '999px',
                     background: '#E4E4DF', overflow: 'hidden', marginBottom: '14px',
@@ -395,7 +536,6 @@ function ProtectionStatusCard({
                     />
                 </div>
 
-                {/* Time units grid */}
                 {tracker.hasData ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                         {[
@@ -445,7 +585,6 @@ function ProtectionStatusCard({
                         ))}
                     </div>
                 ) : (
-                    /* Loading skeleton when no data yet */
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                         {['Days', 'Hours', 'Mins', 'Secs'].map(unit => (
                             <div

@@ -39,7 +39,7 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112'
 type WillAccountData = IdlAccounts<DeadWallet>['willAccount']
 
 
-type WillStatus = 'Active' | 'Grace Period' | 'Triggered' | 'Paused'
+type WillStatus = 'active' | 'claimed'
 
 // Shape of the processed will data returned directly from the hook
 export type WillData = {
@@ -62,11 +62,11 @@ function deriveWillStatus(
     interval: number,
     claimed: boolean,
 ): WillStatus {
-    if (claimed) return 'Triggered'
+    if (claimed) return 'claimed'
     const lateBy = Math.floor(Date.now() / 1000) - (lastCheckIn + interval)
-    if (lateBy <= 0) return 'Active'
-    if (lateBy <= 3 * 24 * 60 * 60) return 'Grace Period'
-    return 'Triggered'
+    if (lateBy <= 0) return 'active'
+
+    return 'claimed'
 }
 
 // No JS filter needed — memcmp on-chain already scopes to this willPda only
