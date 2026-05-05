@@ -1,0 +1,9 @@
+{
+  "name": "PalmUSD",
+  "symbol": "PUSD",
+  "description": "PUSD (PALM USD) devnet token built to simulate transactions",
+  "image": "https://sync-pay-six.vercel.app/palm-tree.svg",
+  "uri": "https://sync-pay-six.vercel.app/coin_metadata.json",
+  "seller_fee_basis_points": 0,
+  "creators": null
+}

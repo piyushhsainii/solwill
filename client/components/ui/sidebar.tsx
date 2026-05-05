@@ -51,27 +51,29 @@ export default function Sidebar() {
                 }}
             >
                 {/* Logo */}
-                <div style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    padding: '8px 10px', marginBottom: '26px',
-                }}>
-                    <motion.div
-                        whileHover={{ scale: 1.2, rotate: -6 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+                <Link href={'/'} >
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        padding: '8px 10px', marginBottom: '26px',
+                    }}>
+                        <motion.div
+                            whileHover={{ scale: 1.2, rotate: -6 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
 
-                        style={{
-                            width: '42px', height: '42px', borderRadius: '14px',
-                            background: '#EEEEE9', border: '1px solid #E4E4DF',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            overflow: 'hidden',
-                        }}>
-                        <img src="/solwillicon.jpeg" className="h-full w-full object-cover" alt="SolWill" />
-                    </motion.div>
-                    <div>
-                        <div className="tracking-tight" style={{ fontSize: '15px', color: '#1A1A18', fontWeight: 300 }}>SolWill</div>
-                        <div className="tracking-tight" style={{ fontSize: '13px', color: '#8A8A82', marginTop: 1, fontWeight: 300 }}>Secure Legacy Vault</div>
+                            style={{
+                                width: '42px', height: '42px', borderRadius: '14px',
+                                background: '#EEEEE9', border: '1px solid #E4E4DF',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                overflow: 'hidden',
+                            }}>
+                            <img src="/solwillicon.jpeg" className="h-full w-full object-cover" alt="SolWill" />
+                        </motion.div>
+                        <div>
+                            <div className="tracking-tight" style={{ fontSize: '15px', color: '#1A1A18', fontWeight: 300 }}>SolWill</div>
+                            <div className="tracking-tight" style={{ fontSize: '13px', color: '#8A8A82', marginTop: 1, fontWeight: 300 }}>Secure Legacy Vault</div>
+                        </div>
                     </div>
-                </div>
+                </Link>
 
                 {/* Navigation */}
                 <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>

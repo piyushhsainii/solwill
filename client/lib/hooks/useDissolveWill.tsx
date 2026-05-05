@@ -18,7 +18,7 @@ export function useDissolveWill() {
     const { raw: wallet } = useSollWillWallet()
     const { refresh } = useAnchor()
     const setTxPending = useWillStore((s) => s.setTxPending)
-    const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
+    const PROGRAM_ID = new PublicKey('FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE')
 
     const HEIR_SEED = Buffer.from('heir')
 
@@ -75,13 +75,13 @@ export function useDissolveWill() {
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
                 // ── Build asset remaining accounts ───────────────────────
+                // ── Build asset remaining accounts ───────────────────────
                 const assetAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = []
 
                 await Promise.all(
                     onChainAssets.map(async (asset, idx) => {
-                        const mintPk = asset.mint
+                        const mintPk = new PublicKey(asset.mint)
 
-                        // ✅ Check which token program owns this mint
                         const mintInfo = await connection.getAccountInfo(mintPk)
                         if (!mintInfo) {
                             console.warn(`[dissolveWill] asset[${idx}] mint not found on-chain:`, mintPk.toBase58())
@@ -98,9 +98,10 @@ export function useDissolveWill() {
                         const ownerAta = getAssociatedTokenAddressSync(mintPk, ownerPk, false, tokenProgramId)
 
                         const vaultAtaInfo = await connection.getAccountInfo(vaultAta)
-                        console.log(`  mint:     `, mintPk.toBase58())
-                        console.log(`  vaultAta: `, vaultAta.toBase58())
-                        console.log(`  ownerAta: `, ownerAta.toBase58())
+                        console.log(`  mint:            `, mintPk.toBase58())
+                        console.log(`  vaultAta:        `, vaultAta.toBase58())
+                        console.log(`  ownerAta:        `, ownerAta.toBase58())
+                        console.log(`  tokenProgram:    `, tokenProgramId.toBase58())
                         console.log(`  vaultAta exists: `, !!vaultAtaInfo)
 
                         if (!vaultAtaInfo) {
@@ -112,6 +113,7 @@ export function useDissolveWill() {
                             { pubkey: vaultAta, isSigner: false, isWritable: true },
                             { pubkey: ownerAta, isSigner: false, isWritable: true },
                             { pubkey: mintPk, isSigner: false, isWritable: false },
+                            { pubkey: tokenProgramId, isSigner: false, isWritable: false }, // ✅ 4th account
                         )
                     })
                 )
@@ -149,10 +151,10 @@ export function useDissolveWill() {
                 const remainingAccounts = [...assetAccounts, ...heirRemainingAccounts]
 
                 // ── Final count check before sending ─────────────────────
-                const expectedCount = (onChainAssets.length * 3) + onChainHeirCount
+                const expectedCount = (onChainAssets.length * 4) + onChainHeirCount
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
                 console.log('[dissolveWill] final remainingAccounts summary:')
-                console.log('  asset accounts: ', assetAccounts.length, '(expected', onChainAssets.length * 3, ')')
+                console.log('  asset accounts: ', assetAccounts.length, '(expected', onChainAssets.length * 4, ')')
                 console.log('  heir accounts:  ', heirRemainingAccounts.length, '(expected', onChainHeirCount, ')')
                 console.log('  total passing:  ', remainingAccounts.length, '(expected', expectedCount, ')')
                 console.log('  count match:    ', remainingAccounts.length === expectedCount)
@@ -164,12 +166,11 @@ export function useDissolveWill() {
                     )
                 }
 
-                // ── Build instruction ────────────────────────────────────
                 const ix = await program.methods
                     .dissolveWill()
                     .accounts({
                         signer: ownerPk,
-                        tokenProgram: TOKEN_PROGRAM_ID,
+                        tokenProgram: TOKEN_PROGRAM_ID
                     })
                     .remainingAccounts(remainingAccounts)
                     .instruction()

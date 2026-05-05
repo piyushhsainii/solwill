@@ -184,7 +184,7 @@ function TokenDialog({ token, onClose }: { token: Asset; onClose: () => void }) 
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                         {token.icon
-                            ? <img src={token.icon} style={{ width: '32px', height: '32px', objectFit: 'contain' }} alt={token.symbol} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                            ? <img src={token.mint == '6vksGfmFm9xQHxnMWEhJUj3GnC5r8d2jUxzJHZ26txLq' ? "https://sync-pay-six.vercel.app/palm-tree.svg" : token.icon} style={{ width: '32px', height: '32px', objectFit: 'contain' }} alt={token.symbol} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                             : <span style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)' }}>{token.symbol?.[0] ?? '?'}</span>
                         }
                     </div>
@@ -369,7 +369,7 @@ export default function LockedAssets() {
                                     flexShrink: 0, overflow: 'hidden',
                                 }}>
                                     {asset.icon
-                                        ? <img src={asset.icon} style={{ width: '26px', height: '26px', objectFit: 'contain' }} alt={asset.symbol} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                                        ? <img src={asset.mint == '6vksGfmFm9xQHxnMWEhJUj3GnC5r8d2jUxzJHZ26txLq' ? "https://sync-pay-six.vercel.app/palm-tree.svg" : asset.icon} style={{ width: '26px', height: '26px', objectFit: 'contain' }} alt={asset.symbol} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                                         : <span style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>{asset.symbol?.[0] ?? '?'}</span>
                                     }
                                 </div>

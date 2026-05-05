@@ -20,8 +20,10 @@ import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes'
 import IDL from '../idl/idl.json'
 import { useSollWillWallet } from './useSolWillWallet'
 import { DeadWallet } from '../idl/idl'
+import { getTokenProgramForMint } from '../utils/helper'
+import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
-const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
+const PROGRAM_ID = new PublicKey('FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const HEIR_SEED = Buffer.from('heir')
@@ -192,17 +194,83 @@ export function useClaimWill() {
 
                 const toastId = toast.loading('Claiming your inheritance...')
 
+                // ── Fetch on-chain will account ──────────────────────────
+                const willData = await program.account.willAccount.fetch(willPda) as any
+                const onChainAssets = willData.assets as Array<{ mint: PublicKey }>
+
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+                console.log('[claimWill] on-chain will account:')
+                console.log('  willPda:      ', willPda.toBase58())
+                console.log('  vaultPda:     ', vaultPda.toBase58())
+                console.log('  assets.len(): ', onChainAssets.length)
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+                // ── Build asset remaining accounts (4 per token) ─────────
+                const assetAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = []
+
+                await Promise.all(
+                    onChainAssets.map(async (asset, idx) => {
+                        const mintPk = new PublicKey(asset.mint)
+
+                        const mintInfo = await connection.getAccountInfo(mintPk)
+                        if (!mintInfo) {
+                            console.warn(`[claimWill] asset[${idx}] mint not found on-chain:`, mintPk.toBase58())
+                            return
+                        }
+
+                        const tokenProgramId = mintInfo.owner.toBase58() === TOKEN_2022_PROGRAM_ID.toBase58()
+                            ? TOKEN_2022_PROGRAM_ID
+                            : TOKEN_PROGRAM_ID
+
+                        console.log(`[claimWill] asset[${idx}] using token program:`, tokenProgramId.toBase58())
+
+                        const vaultAta = getAssociatedTokenAddressSync(mintPk, vaultPda, true, tokenProgramId)
+                        const heirAta = getAssociatedTokenAddressSync(mintPk, claimerPk, false, tokenProgramId)
+
+                        const vaultAtaInfo = await connection.getAccountInfo(vaultAta)
+                        console.log(`  mint:            `, mintPk.toBase58())
+                        console.log(`  vaultAta:        `, vaultAta.toBase58())
+                        console.log(`  heirAta:         `, heirAta.toBase58())
+                        console.log(`  tokenProgram:    `, tokenProgramId.toBase58())
+                        console.log(`  vaultAta exists: `, !!vaultAtaInfo)
+
+                        if (!vaultAtaInfo) {
+                            console.warn(`[claimWill] skipping — vault ATA not initialized`)
+                            return
+                        }
+
+                        assetAccounts.push(
+                            { pubkey: vaultAta, isSigner: false, isWritable: true },
+                            { pubkey: heirAta, isSigner: false, isWritable: true },
+                            { pubkey: mintPk, isSigner: false, isWritable: false },
+                            { pubkey: tokenProgramId, isSigner: false, isWritable: false }, // ✅ 4th account
+                        )
+                    })
+                )
+
+                // ── Final count check ────────────────────────────────────
+                const expectedCount = onChainAssets.length * 4  // ✅ 4 per token
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+                console.log('[claimWill] remainingAccounts summary:')
+                console.log('  asset accounts:', assetAccounts.length, '(expected', expectedCount, ')')
+                console.log('  count match:   ', assetAccounts.length === expectedCount)
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+                if (assetAccounts.length !== expectedCount) {
+                    throw new Error(
+                        `[claimWill] account count mismatch — passing ${assetAccounts.length}, program expects ${expectedCount}`
+                    )
+                }
+
+                // ── Build instruction ────────────────────────────────────
                 const ix = await program.methods
                     .claimLl()
                     .accounts({
                         signer: claimerPk,
                         willAccountAddress: ownerPk,
-                        // willAccount: willPda,
-                        // heirAccount: heirPda,
                         heirAccountAddress: claimerPk,
-                        tokenProgram: ""
-                        // vaultAccount: vaultPda,
                     })
+                    .remainingAccounts(assetAccounts)
                     .instruction()
 
                 const { blockhash, lastValidBlockHeight } =

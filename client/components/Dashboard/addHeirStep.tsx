@@ -117,7 +117,7 @@ export default function AddHeirsStep({
         if (address.trim().length < 32) return setError('Invalid Solana address')
         if (effectiveShare <= 0) return setError('No allocation remaining')
         setError('')
-        onAdd(address.trim(), effectiveShare)
+        onAdd(address.trim(), effectiveShare * 100)
         setAddress('')
         setShare(remaining - effectiveShare > 0 ? remaining - effectiveShare : 1)
     }
@@ -481,7 +481,7 @@ export default function AddHeirsStep({
                                                             }}
                                                         />
                                                         <button
-                                                            onClick={() => { onUpdate(heir.id, editAddr, editShare); setEditingId(null) }}
+                                                            onClick={() => { onUpdate(heir.id, editAddr, editShare * 100); setEditingId(null) }}
                                                             style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: 'var(--primary)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
                                                             Save
                                                         </button>

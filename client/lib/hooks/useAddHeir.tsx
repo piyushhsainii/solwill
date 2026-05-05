@@ -13,7 +13,7 @@ import { useSollWillWallet } from './useSolWillWallet'
 import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 
-const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
+const PROGRAM_ID = new PublicKey('FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE')
 const WILL_SEED = Buffer.from('will')
 const HEIR_SEED = Buffer.from('heir')
 const RPC_URL = clusterApiUrl('devnet')
@@ -50,7 +50,7 @@ export function useAddHeir() {
                     return false
                 }
 
-                if (bps <= 0 || bps > 10000) {
+                if (bps <= 0 || (bps / 100) > 10000) {
                     toast.error('BPS must be between 1 and 10000.')
                     return false
                 }
@@ -100,7 +100,7 @@ export function useAddHeir() {
 
                 // IDL accounts: signer, heirAccount (PDA), willAccount (PDA), heirOriginalAddress, systemProgram
                 const ix = await program.methods
-                    .addHeirsToWill(bps)
+                    .addHeirsToWill(bps / 100)
                     .accounts({
                         signer: ownerPk,
                         heirOriginalAddress: heirPk,

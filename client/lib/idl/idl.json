@@ -1,5 +1,5 @@
 {
-  "address": "55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz",
+  "address": "FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE",
   "metadata": {
     "name": "dead_wallet",
     "version": "0.1.0",
@@ -224,9 +224,6 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "token_program"
         },
         {
           "name": "associated_token_program",
@@ -1292,6 +1289,11 @@
       "code": 6018,
       "name": "InvalidHeirAccount",
       "msg": "Invalid Heir Account"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidTokenProgram",
+      "msg": "Invalid Token Program"
     }
   ],
   "types": [

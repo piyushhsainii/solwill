@@ -20,7 +20,7 @@ import { useAnchor } from '@/app/(protected)/layout'
 import { DeadWallet } from '../idl/idl'
 import { getTokenProgramForMint } from '../utils/helper'
 
-const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
+const PROGRAM_ID = new PublicKey('FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const RPC_URL = clusterApiUrl('devnet')
@@ -85,10 +85,6 @@ export function useWithdrawSOL() {
 
                 // IDL uses u32 for amt — max ~4.29 billion lamports (~4.29 SOL)
                 const amountLamports = Math.floor(amountSol * 1_000_000_000)
-                if (amountLamports > 4_294_967_295) {
-                    toast.error('Amount exceeds u32 max (~4.29 SOL per withdrawal)')
-                    return false
-                }
 
                 const [willPda] = PublicKey.findProgramAddressSync(
                     [WILL_SEED, ownerPk.toBuffer()], PROGRAM_ID
@@ -108,7 +104,7 @@ export function useWithdrawSOL() {
                 const toastId = toast.loading(`Withdrawing ${amountSol} SOL...`)
 
                 const ix = await program.methods
-                    .withdrawSolToken(amountLamports)
+                    .withdrawSolToken(new BN(amountLamports))
                     .accounts({
                         signer: ownerPk,
                     })
@@ -121,8 +117,8 @@ export function useWithdrawSOL() {
                 }).add(ix)
                 const logs = await connection.simulateTransaction(tx)
                 console.log(logs)
-                // const sig = await buildAndSend(raw, connection, ix, ownerPk)
-                // console.log('[withdrawSOL] confirmed:', sig)
+                const sig = await buildAndSend(raw, connection, ix, ownerPk)
+                console.log('[withdrawSOL] confirmed:', sig)
 
                 toast.success(`${amountSol} SOL withdrawn!`, { id: toastId })
                 await refresh()
@@ -203,19 +199,26 @@ export function useWithdrawSPL() {
 
                 const toastId = toast.loading('Withdrawing token...')
 
-
                 const ix = await program.methods
-                    .withdrawSplToken(amountRaw)
-                    .accountsPartial({
+                    .withdrawSplToken(new BN(amountRaw))
+                    .accounts({
                         signer: ownerPk,
-                        willAccount: willPda,
-                        ownerAta: ownerAta,
-                        vault: vaultPda,
+                        // willAccount: willPda,
+                        // ownerAta: ownerAta,
+                        // vault: vaultPda,
                         vaultMint: mint,
-                        vaultAta: vaultAta,
+                        // vaultAta: vaultAta,
                         tokenProgram: tokenProgram
                     })
                     .instruction()
+
+                const tx = new Transaction({
+                    blockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
+                    feePayer: ownerPk,
+                    lastValidBlockHeight: (await connection.getLatestBlockhash('confirmed')).lastValidBlockHeight,
+                }).add(ix)
+                const logs = await connection.simulateTransaction(tx)
+                console.log(logs)
 
                 const sig = await buildAndSend(raw, connection, ix, ownerPk)
                 console.log('[withdrawSPL] confirmed:', sig)

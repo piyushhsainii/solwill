@@ -19,7 +19,7 @@ import { useAnchorProvider } from './useAnchorProvider'
 import { useWillStore } from '@/app/store/useWillStore'
 import { useSollWillWallet } from './useSolWillWallet'
 
-const PROGRAM_ID = new PublicKey('55rDQhusthW8fWxRaTVaaszshovzhLRUCxdYsiAtWVHz')
+const PROGRAM_ID = new PublicKey('FCLjiGPR8s4oxSi4jMd4Ra1SsJzxuN5FXq5zw8ueTsRE')
 const WILL_SEED = Buffer.from('will')
 const VAULT_SEED = Buffer.from('vault')
 const RPC_URL = clusterApiUrl('devnet')
@@ -161,7 +161,7 @@ export function useDepositSPL() {
     const [error, setError] = useState<Error | null>(null)
 
     const depositSPL = useCallback(
-        async (mint: PublicKey, amountRaw: number): Promise<boolean> => {
+        async (mint: PublicKey, amountRaw: number, decimals: number): Promise<boolean> => {
             try {
                 if (!ready || walletLoading) { toast.error('Wallet still loading...'); return false }
                 if (!connected || !publicKey || !raw) { toast.error('Please connect wallet.'); return false }
@@ -172,7 +172,6 @@ export function useDepositSPL() {
                 const program: Program<DeadWallet> = new Program<DeadWallet>(IDL as Idl, provider)
 
                 const ownerPk = publicKey
-                const amount = new BN(amountRaw)
 
                 const [willPda] = PublicKey.findProgramAddressSync(
                     [WILL_SEED, ownerPk.toBuffer()], PROGRAM_ID
@@ -201,7 +200,7 @@ export function useDepositSPL() {
 
                 // Anchor resolves ownerAta and vaultAta automatically from the IDL seeds
                 const ix = await program.methods
-                    .depositSplTokens(amount)
+                    .depositSplTokens(new BN(amountRaw))
                     .accountsPartial({
                         owner: ownerPk,
                         mint: mint,
@@ -222,7 +221,8 @@ export function useDepositSPL() {
                     lastValidBlockHeight: bx.lastValidBlockHeight
 
                 }).add(ix)
-                // const logs = await connection.simulateTransaction(tx)
+                const logs = await connection.simulateTransaction(tx)
+                console.log(logs)
                 const sig = await buildAndSend(raw, connection, ix, ownerPk)
                 console.log('[depositSPL] confirmed:', sig)
 

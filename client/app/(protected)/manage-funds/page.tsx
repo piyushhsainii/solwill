@@ -225,7 +225,7 @@ function TokenSelector({ tokens, selected, onSelect }: { tokens: Token[]; select
         return () => document.removeEventListener('mousedown', handler)
     }, [])
     return (
-        <div ref={ref} style={{ position: 'relative' }}>
+        <div ref={ref} style={{ position: 'relative', zIndex: 20 }}>
             <motion.button whileHover={{ borderColor: '#242B35' }} whileTap={{ scale: 0.98 }} onClick={() => setOpen(v => !v)}
                 style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: '1px solid #E4E4DF', background: '#fff', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontFamily: 'inherit', transition: 'border-color 0.18s' }}>
                 <img src={selected.logo} alt={selected.symbol} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
@@ -238,7 +238,20 @@ function TokenSelector({ tokens, selected, onSelect }: { tokens: Token[]; select
             <AnimatePresence>
                 {open && (
                     <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                        style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: '#fff', border: '1px solid #E4E4DF', borderRadius: 16, boxShadow: '0 8px 32px rgba(36,43,53,0.1)', zIndex: 20, overflow: 'hidden' }}>
+                        style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 6px)',
+                            left: 0,
+                            right: 0,
+                            background: '#fff',
+                            border: '1px solid #E4E4DF',
+                            borderRadius: 16,
+                            boxShadow: '0 8px 32px rgba(36,43,53,0.1)',
+                            zIndex: 20,
+                            // ❌ overflow: 'hidden'  ← remove this
+                            maxHeight: 500,          // ✅ add max height instead
+                            overflowY: 'auto'        // ✅ scroll if too many tokens
+                        }}>
                         {tokens.map((token, i) => (
                             <motion.button key={token.symbol} whileHover={{ background: '#F7F7F4' }} onClick={() => { onSelect(token); setOpen(false) }}
                                 style={{ width: '100%', padding: '11px 14px', border: 'none', borderBottom: i < tokens.length - 1 ? '1px solid #F0F0EB' : 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -429,12 +442,19 @@ export default function ManageFundsPage() {
         if (ok) setDepositSolAmt('')
     }
 
+
     const handleDepositSPL = async () => {
         if (!effectiveSplToken) return
         const ok = await depositSPL(
             new PublicKey(effectiveSplToken.mint),
-            Math.floor(Number(depositSplAmt) * Math.pow(10, effectiveSplToken.decimals))
+            Math.floor(Number(depositSplAmt) * Math.pow(10, effectiveSplToken.decimals)),
+            effectiveSplToken.decimals
         )
+        console.log(`raw`, depositSplAmt)
+        console.log(`raw 2`, Number(depositSplAmt) * Math.pow(10, effectiveSplToken.decimals))
+
+        console.log(effectiveSplToken.mint)
+        console.log(effectiveSplToken.decimals)
         if (ok) setDepositSplAmt('')
     }
 
@@ -447,7 +467,7 @@ export default function ManageFundsPage() {
         if (!withdrawSplToken) return
         const ok = await withdrawSPL(
             new PublicKey(withdrawSplToken.mint),
-            Math.floor(Number(withdrawSplAmt) * Math.pow(10, withdrawSplToken.decimals))
+            Math.floor(Number(withdrawSplAmt))
         )
         if (ok) setWithdrawSplAmt('')
     }

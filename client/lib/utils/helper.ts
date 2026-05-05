@@ -132,25 +132,11 @@ export const TOKENS: Token[] = [
     logo: SOL_LOGO,
   },
   {
-    symbol: "USDC",
-    name: "USD Coin",
-    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    symbol: "PUSD",
+    name: "PalmUSD",
+    mint: "6vksGfmFm9xQHxnMWEhJUj3GnC5r8d2jUxzJHZ26txLq",
     decimals: 6,
-    logo: "/usdc-logo.png",
-  },
-  {
-    symbol: "USDT",
-    name: "Tether",
-    mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-    decimals: 6,
-    logo: "/USDT_LOGO.png",
-  },
-  {
-    symbol: "BONK",
-    name: "Bonk",
-    mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
-    decimals: 5,
-    logo: "/bonk-logo.png",
+    logo: "https://sync-pay-six.vercel.app/palm-tree.svg",
   },
 ];
 

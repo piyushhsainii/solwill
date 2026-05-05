@@ -40,7 +40,9 @@ pub enum Errors {
     #[msg("DeadlineAlreadyPassed")]
     WillDeadlinePassed,
     #[msg("Invalid Heir Account")]
-    InvalidHeirAccount
+    InvalidHeirAccount,
+    #[msg("Invalid Token Program")]
+    InvalidTokenProgram
 
 
 }
